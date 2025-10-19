@@ -3,15 +3,23 @@ import tkinter as tk
 BREADBOARD_WIDTH = 500
 BREADBOARD_HEIGHT = 300
 BREADBOARD_COLOR = "#C0C0C0"
-HOLE_SIZE = 4
+HOLE_SIZE = 6
 HOLE_COLOR = "#000000"
-HOLE_SPACING = 10
+HOLE_SPACING = 15
+CENTER_CHANNEL_HEIGHT = 3 * HOLE_SPACING
+RAIL_COUNT = 2
 
 class BreadboardSimulatorApp:
     def __init__(self, master):
         self.master = master
         master.title("Python Breadboard Simulator")
 
+        self.active_component_type = "Wire"
+        self.placement_node_1 = None
+        self.node_locations = []
+        self.components = []
+        self.hover_rect = None
+        
         self.canvas = tk.Canvas(
             master, 
             width=BREADBOARD_WIDTH + 200, 
