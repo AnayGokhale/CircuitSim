@@ -19,9 +19,10 @@ class Resistor:
         self.resistance = resistance
 
 class LED:
-    def __init__(self, anode_node, cathode_node, resistance, forward_voltage):
+    def __init__(self, anode_node, cathode_node, resistance, forward_voltage, color):
         self.anode_node = anode_node
         self.cathode_node = cathode_node
         self.resistance = resistance
         self.forward_voltage = forward_voltage
+        self.color = color
 
