@@ -72,6 +72,7 @@ class BreadboardSimulator:
         self.hovered_hole = None
         
         # Create UI
+        self.create_buttons()
         self.create_holes()
         
         # Measurements
@@ -81,7 +82,17 @@ class BreadboardSimulator:
             "Resistance": 0.0,
             "Power": 0.0
         }
-        
+    
+    def create_buttons(self):
+        self.buttons = []
+        components = ["Wire", "Battery", "Resistor", "LED"]
+        for i, comp in enumerate(components):
+            btn = Button(50 + i * 130, 30, 120, 45, comp)
+            if comp == self.active_component:
+                btn.selected = True
+            self.buttons.append(btn)
+        self.run_button = Button(570, 30, 120, 45, "Run")
+    
     def create_holes(self):
         self.holes = []
         
@@ -124,6 +135,34 @@ class BreadboardSimulator:
             elif hole == self.first_hole:
                 color = HOLE_SELECTED_COLOR
             hole.draw(self.screen, color)
+    
+    def handle_click(self, pos):
+        # Check buttons
+        for btn in self.buttons:
+            if btn.rect.collidepoint(pos):
+                for b in self.buttons:
+                    b.selected = False
+                btn.selected = True
+                self.active_component = btn.text
+                return
+        
+        if self.run_button.rect.collidepoint(pos):
+            print("Running simulation...")
+            # TODO: Call physics simulation
+            return
+        
+        # Check holes
+        for hole in self.holes:
+            if hole.contains(pos):
+                if self.first_hole is None:
+                    self.first_hole = hole
+                    print(f"Start: row={hole.row}, col={hole.col}, rail={hole.is_rail}")
+                else:
+                    print(f"End: row={hole.row}, col={hole.col}, rail={hole.is_rail}")
+                    print(f"Placing {self.active_component}")
+                    # TODO: Create component
+                    self.first_hole = None
+                return
     
     def run(self):
         running = True
