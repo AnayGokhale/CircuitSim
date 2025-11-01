@@ -1,6 +1,6 @@
 import pygame
 import sys
-
+from Components import Wire, Battery, Resistor, LED
 # Initialize Pygame
 pygame.init()
 
@@ -37,9 +37,10 @@ class Hole:
         return dx*dx + dy*dy <= (self.radius + 5)**2
 
 class Button:
-    def __init__(self, x, y, width, height, text):
+    def __init__(self, x, y, width, height, text, type):
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
+        self.type = type
         self.selected = False
         
     def draw(self, surface, font):
@@ -67,10 +68,12 @@ class BreadboardSimulator:
         self.board_height = 450
         
         # Component selection
-        self.active_component = "Wire"
+        self.active_component_txt = "Wire"
+        self.active_component = Wire
         self.first_hole = None
         self.hovered_hole = None
-        
+        self.active_path = None
+        self.components = {}
         # Create UI
         self.create_buttons()
         self.create_holes()
@@ -85,10 +88,11 @@ class BreadboardSimulator:
     
     def create_buttons(self):
         self.buttons = []
-        components = ["Wire", "Battery", "Resistor", "LED"]
-        for i, comp in enumerate(components):
-            btn = Button(50 + i * 130, 30, 120, 45, comp)
-            if comp == self.active_component:
+        components = [Wire, Battery, Resistor, LED]
+        component_text = ["Wire", "Battery", "Resistor", "LED"]
+        for i, comp in enumerate(component_text):
+            btn = Button(50 + i * 130, 30, 120, 45, comp, components[i])
+            if comp == self.active_component_txt:
                 btn.selected = True
             self.buttons.append(btn)
         self.run_button = Button(570, 30, 120, 45, "Run")
@@ -135,7 +139,11 @@ class BreadboardSimulator:
             elif hole == self.first_hole:
                 color = HOLE_SELECTED_COLOR
             hole.draw(self.screen, color)
-    
+        
+        # Draw buttons
+        for btn in self.buttons:
+            btn.draw(self.screen, self.font)
+
     def handle_click(self, pos):
         # Check buttons
         for btn in self.buttons:
@@ -143,9 +151,10 @@ class BreadboardSimulator:
                 for b in self.buttons:
                     b.selected = False
                 btn.selected = True
-                self.active_component = btn.text
+                self.active_component = btn.type
+                self.active_component_txt = btn.text
                 return
-        
+
         if self.run_button.rect.collidepoint(pos):
             print("Running simulation...")
             # TODO: Call physics simulation
@@ -158,8 +167,13 @@ class BreadboardSimulator:
                     self.first_hole = hole
                     print(f"Start: row={hole.row}, col={hole.col}, rail={hole.is_rail}")
                 else:
+                    self.active_component.node1 = (self.first_hole.row, self.first_hole.col)
+                    self.active_component.node2 = (hole.row, hole.col)
+                    self.active_path = ((self.first_hole.row, self.first_hole.col), (hole.row, hole.col))
+                    self.components[self.active_component] = self.active_path
                     print(f"End: row={hole.row}, col={hole.col}, rail={hole.is_rail}")
                     print(f"Placing {self.active_component}")
+                    print(f"Current components: {self.components}")
                     # TODO: Create component
                     self.first_hole = None
                 return
