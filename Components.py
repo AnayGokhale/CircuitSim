@@ -7,9 +7,9 @@ class Wire:
         self.node2 = node2
 
 class Battery:
-    def __init__(self, positive_node, negative_node, voltage):
-        self.positive_node = positive_node
-        self.negative_node = negative_node
+    def __init__(self, node1, node2, voltage):
+        self.node1 = node1
+        self.node2 = node2
         self.voltage = voltage
 
 class Resistor:
@@ -19,9 +19,8 @@ class Resistor:
         self.resistance = resistance
 
 class LED:
-    def __init__(self, anode_node, cathode_node, resistance, forward_voltage, color):
-        self.anode_node = anode_node
-        self.cathode_node = cathode_node
+    def __init__(self, node1, node2, resistance, color):
+        self.node1 = node1
+        self.node2 = node2
         self.resistance = resistance
-        self.forward_voltage = forward_voltage
         self.color = color
