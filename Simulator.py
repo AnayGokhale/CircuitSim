@@ -1,6 +1,7 @@
 import pygame
 import sys
 from Components import Wire, Battery, Resistor, LED
+from Physics import path_matrix
 # Initialize Pygame
 pygame.init()
 
@@ -53,6 +54,38 @@ class Button:
         text_rect = text_surf.get_rect(center=self.rect.center)
         surface.blit(text_surf, text_rect)
 
+class Dropdown:
+    def __init__(self, x, y, width, height, options, default):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.options = options
+        self.selected_option = default
+        self.expanded = False
+        self.option_rects = [pygame.Rect(x, y + (i+1)*height, width, height) for i in range(len(options))]
+
+    def draw(self, surface, font):
+        pygame.draw.rect(surface, (200, 200, 200), self.rect)
+        text_surf = font.render(str(self.selected_option), True, (0, 0, 0))
+        surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
+
+        if self.expanded:
+            for i, opt in enumerate(self.options):
+                pygame.draw.rect(surface, (220, 220, 220), self.option_rects[i])
+                opt_surf = font.render(str(opt), True, (0, 0, 0))
+                surface.blit(opt_surf, opt_surf.get_rect(center=self.option_rects[i].center))
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.expanded = not self.expanded
+                return None
+            if self.expanded:
+                for i, opt_rect in enumerate(self.option_rects):
+                    if opt_rect.collidepoint(event.pos):
+                        self.selected_option = self.options[i]
+                        self.expanded = False
+                        return self.selected_option
+        return None
+
 class BreadboardSimulator:
     def __init__(self):
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -69,11 +102,12 @@ class BreadboardSimulator:
         
         # Component selection
         self.active_component_txt = "Wire"
-        self.active_component = Wire
+        self.active_component = Wire(0,0)
         self.first_hole = None
         self.hovered_hole = None
-        self.active_path = None
-        self.components = {}
+        self.components = []
+        self.dropdown = None
+
         # Create UI
         self.create_buttons()
         self.create_holes()
@@ -95,7 +129,7 @@ class BreadboardSimulator:
             if comp == self.active_component_txt:
                 btn.selected = True
             self.buttons.append(btn)
-        self.run_button = Button(570, 30, 120, 45, "Run")
+        self.run_button = Button(570, 30, 120, 45, "Run", None)
     
     def create_holes(self):
         self.holes = []
@@ -143,6 +177,7 @@ class BreadboardSimulator:
         # Draw buttons
         for btn in self.buttons:
             btn.draw(self.screen, self.font)
+        self.run_button.draw(self.screen, self.font)
 
     def handle_click(self, pos):
         # Check buttons
@@ -151,13 +186,24 @@ class BreadboardSimulator:
                 for b in self.buttons:
                     b.selected = False
                 btn.selected = True
-                self.active_component = btn.type
                 self.active_component_txt = btn.text
+                if btn.type == Wire:
+                    self.active_component = Wire(0,0)
+                    self.dropdown = None
+                elif btn.type == Battery:
+                    self.dropdown = Dropdown(750, 30, 100, 30, [1.5, 3, 5, 9], 3)
+                elif btn.type == Resistor:
+                    self.dropdown = Dropdown(750, 30, 100, 30, [100, 220, 330, 1000], 220)
+                elif btn.type == LED:
+                    self.dropdown = Dropdown(750, 30, 100, 30, ["red", "green", "blue"], "red")
                 return
 
         if self.run_button.rect.collidepoint(pos):
             print("Running simulation...")
             # TODO: Call physics simulation
+            components = self.components
+            path = path_matrix(components)
+            print("Path matrix:", path)
             return
         
         # Check holes
@@ -169,11 +215,10 @@ class BreadboardSimulator:
                 else:
                     self.active_component.node1 = (self.first_hole.row, self.first_hole.col)
                     self.active_component.node2 = (hole.row, hole.col)
-                    self.active_path = ((self.first_hole.row, self.first_hole.col), (hole.row, hole.col))
-                    self.components[self.active_component] = self.active_path
+                    self.components.append(self.active_component)
                     print(f"End: row={hole.row}, col={hole.col}, rail={hole.is_rail}")
-                    print(f"Placing {self.active_component}")
-                    print(f"Current components: {self.components}")
+                    print(f"Placing {self.active_component.name}")
+                    print(f"Current components: {[c.name for c in self.components]}")
                     # TODO: Create component
                     self.first_hole = None
                 return
@@ -192,12 +237,25 @@ class BreadboardSimulator:
                         if hole.contains(event.pos):
                             self.hovered_hole = hole
                             break
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if self.dropdown:
+                        value = self.dropdown.handle_event(event)
+                        if value is not None:
+                            if self.active_component_txt == "Battery":
+                                self.active_component = Battery(0, 0, value)
+                            elif self.active_component_txt == "Resistor":
+                                self.active_component = Resistor(0, 0, value)
+                            elif self.active_component_txt == "LED":
+                                self.active_component = LED(0, 0, 220, value)
+                    self.handle_click(event.pos)
             
             self.screen.fill(BG_COLOR)
             
             # Draw UI            
             self.draw_breadboard()
-            
+            if self.dropdown:
+                self.dropdown.draw(self.screen, self.font)
+
             pygame.display.flip()
             self.clock.tick(60)
         
