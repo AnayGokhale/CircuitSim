@@ -54,24 +54,64 @@ class Button:
         text_rect = text_surf.get_rect(center=self.rect.center)
         surface.blit(text_surf, text_rect)
 
+class NumericCounter:
+    def __init__(self, x, y, width, height, label, value=0, step=1, min_val=0, max_val=1000):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.value = value
+        self.step = step
+        self.min_val = min_val
+        self.max_val = max_val
+        self.label = label
+        self.minus_rect = pygame.Rect(x - 30, y, 25, height)
+        self.plus_rect = pygame.Rect(x + width + 5, y, 25, height)
+
+    def draw(self, surface, font):
+        label_surf = font.render(self.label, True, (0,0,0))
+        surface.blit(label_surf, (self.rect.x - 80, self.rect.y + 5))
+
+        pygame.draw.rect(surface, (230,230,230), self.rect)
+        val_surf = font.render(str(self.value), True, (0,0,0))
+        surface.blit(val_surf, val_surf.get_rect(center=self.rect.center))
+
+        pygame.draw.rect(surface, (200,200,200), self.minus_rect)
+        pygame.draw.rect(surface, (200,200,200), self.plus_rect)
+        surface.blit(font.render("-", True, (0,0,0)), self.minus_rect.move(7,2))
+        surface.blit(font.render("+", True, (0,0,0)), self.plus_rect.move(7,2))
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.minus_rect.collidepoint(event.pos):
+                self.value = max(self.min_val, self.value - self.step)
+                return self.value
+            elif self.plus_rect.collidepoint(event.pos):
+                self.value = min(self.max_val, self.value + self.step)
+                return self.value
+        return None
+
+
 class Dropdown:
-    def __init__(self, x, y, width, height, options, default):
+    def __init__(self, x, y, width, height, label, options, default):
         self.rect = pygame.Rect(x, y, width, height)
         self.options = options
         self.selected_option = default
         self.expanded = False
-        self.option_rects = [pygame.Rect(x, y + (i+1)*height, width, height) for i in range(len(options))]
+        self.label = label
 
     def draw(self, surface, font):
-        pygame.draw.rect(surface, (200, 200, 200), self.rect)
-        text_surf = font.render(str(self.selected_option), True, (0, 0, 0))
+        label_surf = font.render(self.label, True, (0,0,0))
+        surface.blit(label_surf, (self.rect.x - 80, self.rect.y + 5))
+
+        pygame.draw.rect(surface, (230,230,230), self.rect)
+        text_surf = font.render(str(self.selected_option), True, (0,0,0))
         surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
 
         if self.expanded:
             for i, opt in enumerate(self.options):
-                pygame.draw.rect(surface, (220, 220, 220), self.option_rects[i])
-                opt_surf = font.render(str(opt), True, (0, 0, 0))
-                surface.blit(opt_surf, opt_surf.get_rect(center=self.option_rects[i].center))
+                opt_rect = pygame.Rect(self.rect.x, self.rect.y + (i+1)*self.rect.height,
+                                       self.rect.width, self.rect.height)
+                pygame.draw.rect(surface, (200,200,200), opt_rect)
+                opt_surf = font.render(str(opt), True, (0,0,0))
+                surface.blit(opt_surf, opt_surf.get_rect(center=opt_rect.center))
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -79,11 +119,14 @@ class Dropdown:
                 self.expanded = not self.expanded
                 return None
             if self.expanded:
-                for i, opt_rect in enumerate(self.option_rects):
+                for i, opt in enumerate(self.options):
+                    opt_rect = pygame.Rect(self.rect.x, self.rect.y + (i+1)*self.rect.height,
+                                           self.rect.width, self.rect.height)
                     if opt_rect.collidepoint(event.pos):
                         self.selected_option = self.options[i]
                         self.expanded = False
                         return self.selected_option
+                self.expanded = False
         return None
 
 class BreadboardSimulator:
@@ -106,7 +149,7 @@ class BreadboardSimulator:
         self.first_hole = None
         self.hovered_hole = None
         self.components = []
-        self.dropdown = None
+        self.param_widget = None
 
         # Create UI
         self.create_buttons()
@@ -188,20 +231,25 @@ class BreadboardSimulator:
                 btn.selected = True
                 self.active_component_txt = btn.text
                 if btn.type == Wire:
+                    # No widget needed
                     self.active_component = Wire(0,0)
-                    self.dropdown = None
+                    self.param_widget = None
                 elif btn.type == Battery:
-                    self.dropdown = Dropdown(750, 30, 100, 30, [1.5, 3, 5, 9], 3)
+                    # Voltage widget
+                    self.param_widget = NumericCounter(750, 30, 60, 30, "Voltage", value=3, step=1, min_val=1, max_val=12)
                 elif btn.type == Resistor:
-                    self.dropdown = Dropdown(750, 30, 100, 30, [100, 220, 330, 1000], 220)
+                    # Resistance widget
+                    self.param_widget = NumericCounter(750, 30, 60, 30, "Resistance", value=220, step=10, min_val=10, max_val=10000)
                 elif btn.type == LED:
-                    self.dropdown = Dropdown(750, 30, 100, 30, ["red", "green", "blue"], "red")
+                    # Color widget
+                    self.param_widget = Dropdown(750, 30, 100, 30, "Color", ["red","green","blue"], "red")
                 return
 
         if self.run_button.rect.collidepoint(pos):
             print("Running simulation...")
             # TODO: Call physics simulation
             components = self.components
+            # incidence matrix BROKEN
             path = path_matrix(components)
             print("Path matrix:", path)
             return
@@ -224,6 +272,7 @@ class BreadboardSimulator:
                 return
     
     def run(self):
+        # Main loop
         running = True
         while running:
             for event in pygame.event.get():
@@ -238,8 +287,8 @@ class BreadboardSimulator:
                             self.hovered_hole = hole
                             break
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.dropdown:
-                        value = self.dropdown.handle_event(event)
+                    if self.param_widget:
+                        value = self.param_widget.handle_event(event)
                         if value is not None:
                             if self.active_component_txt == "Battery":
                                 self.active_component = Battery(0, 0, value)
@@ -253,8 +302,8 @@ class BreadboardSimulator:
             
             # Draw UI            
             self.draw_breadboard()
-            if self.dropdown:
-                self.dropdown.draw(self.screen, self.font)
+            if self.param_widget:
+                self.param_widget.draw(self.screen, self.font)
 
             pygame.display.flip()
             self.clock.tick(60)
