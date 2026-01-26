@@ -1,7 +1,8 @@
 import pygame
 import sys
+import math
 from Components import Wire, Battery, Resistor, LED
-from Physics import generate_incidence_matrix
+from Physics import generate_incidence_matrix, ModifiedNodalAnalysis
 # Initialize Pygame
 pygame.init()
 
@@ -259,7 +260,7 @@ class BreadboardSimulator:
         dx = end_pos[0] - start_pos[0]
         dy = end_pos[1] - start_pos[1]
         length = (dx**2 + dy**2)**0.5
-        angle = -pygame.math.Vector2(dx, dy).angle_to((1, 0)) # Angle in degrees
+        angle = math.degrees(math.atan2(-dy, dx)) + 180
 
         # Draw wire/leads
         if component.name == "Wire":
@@ -495,11 +496,11 @@ class BreadboardSimulator:
             val = self.param_widget.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos))
             if val is not None:
                 if self.param_for == "Battery":
-                    self.active_component = Battery(0, 0, self.param_widget.value)
+                    self.active_component = Battery(0, 0, None, None, self.param_widget.value)
                 elif self.param_for == "Resistor":
-                    self.active_component = Resistor(0, 0, self.param_widget.value)
+                    self.active_component = Resistor(0, 0, None, None, self.param_widget.value)
                 elif self.param_for == "LED":
-                    self.active_component = LED(0, 0, 220, self.param_widget.selected_option)
+                    self.active_component = LED(0, 0, None, None, 20, self.param_widget.selected_option)
                 return
             # close if clicked outside
             bounds = self.param_widget.bounds()
@@ -533,12 +534,25 @@ class BreadboardSimulator:
             print("Incidence Matrix:")
             for row in matrix:
                 print(row)
+            G = ModifiedNodalAnalysis(matrix, self.components, active_nodes)
+            print("Modified Nodal Analysis:")
+            for row in G:
+                print(row)
             return
         
         # Check holes for placement
         for hole in self.holes:
             if hole.contains(pos):
                 if self.first_hole is None:
+                    if isinstance(self.active_component, Battery):
+                        if hole == self.holes[0]:
+                            self.uf.set_id(hole, 0)
+                            self.sync_node_ids()
+                        else:
+                            prev_id = hole.node_id
+                            self.uf.set_id(hole, 0)
+                            self.uf.set_id(self.holes[0], prev_id)
+                            self.sync_node_ids()
                     self.first_hole = hole
                     self.active_component.node_id_1 = hole.node_id
                     print(f"Start: row={hole.row}, col={hole.col}, rail={hole.is_rail} [Node {hole.node_id}]")
@@ -617,7 +631,6 @@ class BreadboardSimulator:
         
         pygame.quit()
         sys.exit()
-
 
 # Run the simulator
 if __name__ == "__main__":
