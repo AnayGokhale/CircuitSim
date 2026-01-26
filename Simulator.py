@@ -1,7 +1,7 @@
 import pygame
 import sys
 from Components import Wire, Battery, Resistor, LED
-#from Physics import generate_incidence_matrix
+from Physics import generate_incidence_matrix
 # Initialize Pygame
 pygame.init()
 
@@ -330,8 +330,6 @@ class BreadboardSimulator:
         if label:
             text = self.small_font.render(str(label), True, (0, 0, 0))
             self.screen.blit(text, (x - 10, y - 25))
-
-    
     def create_buttons(self):
         # Component buttons
         self.buttons = []
@@ -343,7 +341,6 @@ class BreadboardSimulator:
                 btn.selected = True
             self.buttons.append(btn)
         self.run_button = Button(570, 30, 120, 45, "Run", None)
-
     def open_param_widget_for(self, btn):
         # Anchor directly below the clicked button
         anchor_x = btn.rect.x
@@ -380,7 +377,6 @@ class BreadboardSimulator:
         else:
             self.param_widget = None
             self.param_for = None
-    
     def create_holes(self):
         self.holes = []
         
@@ -410,7 +406,6 @@ class BreadboardSimulator:
                 self.holes.append(Hole(x, y, actual_row, col, is_rail=True))
         
         self.init_node_system()
-
     def init_node_system(self):
         self.uf = UnionFind(self.holes)
         
@@ -466,12 +461,10 @@ class BreadboardSimulator:
         if h: self.uf.set_id(h, 83)
 
         self.sync_node_ids()
-
     def sync_node_ids(self):
         # Update every hole's local node_id property from the UF system
         for hole in self.holes:
-            hole.node_id = self.uf.get_id(hole)
-    
+            hole.node_id = self.uf.get_id(hole)    
     def draw_breadboard(self):
         # Main board
         pygame.draw.rect(self.screen, BREADBOARD_COLOR,
@@ -534,10 +527,12 @@ class BreadboardSimulator:
         if self.run_button.rect.collidepoint(pos):
             print("Running simulation...")
             print("Current components: " + ", ".join(c.name + " [Node " + str(c.node_id_1) + " -> " + str(c.node_id_2) + "]" for c in self.components))
-            #matrix = generate_incidence_matrix(self.components)
-            #print("Incidence Matrix:")
-            #for row in matrix:
-            #    print(row)
+            active_nodes = list(set([c.node_id_1 for c in self.components] + [c.node_id_2 for c in self.components]))
+            print("Active nodes: " + ", ".join(str(n) for n in active_nodes))
+            matrix = generate_incidence_matrix(self.components, active_nodes)
+            print("Incidence Matrix:")
+            for row in matrix:
+                print(row)
             return
         
         # Check holes for placement

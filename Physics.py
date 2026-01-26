@@ -1,9 +1,15 @@
 from Components import Wire, Battery, Resistor, LED
-
-
-
-#def generate_incidence_matrix(components):
+import numpy as np
     
+def generate_incidence_matrix(components, active_nodes):
+    incidence_matrix = np.zeros((len(components), len(active_nodes)))
+    for i, component in enumerate(components):
+        for j, node in enumerate(active_nodes):
+            if component.node_id_1 == node:
+                incidence_matrix[i][j] = -1
+            elif component.node_id_2 == node:
+                incidence_matrix[i][j] = 1
+    return incidence_matrix
 
 def calculate_resistance_in_series(resistances):
     return sum(resistances)
