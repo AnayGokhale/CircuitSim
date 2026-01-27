@@ -372,7 +372,7 @@ class BreadboardSimulator:
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "Resistor"
-            self.active_component = Resistor(0, 0, None, None, widget.value)
+            self.active_component = Resistor(0, 0, None, None, widget.value, 0.0)
 
         elif btn.text == "LED":
             # Create dropdown for LED color
@@ -381,7 +381,7 @@ class BreadboardSimulator:
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "LED"
-            self.active_component = LED(0, 0, None, None, 220, widget.selected_option)  # default 220Ω
+            self.active_component = LED(0, 0, None, None, 220, 0.0, widget.selected_option)  # default 220Ω
         else:
             self.param_widget = None
             self.param_for = None
@@ -504,9 +504,9 @@ class BreadboardSimulator:
                 if self.param_for == "Battery":
                     self.active_component = Battery(0, 0, None, None, self.param_widget.value)
                 elif self.param_for == "Resistor":
-                    self.active_component = Resistor(0, 0, None, None, self.param_widget.value)
+                    self.active_component = Resistor(0, 0, None, None, self.param_widget.value, 0.0)
                 elif self.param_for == "LED":
-                    self.active_component = LED(0, 0, None, None, 20, self.param_widget.selected_option)
+                    self.active_component = LED(0, 0, None, None, 20, 0.0, self.param_widget.selected_option)
                 return
             # close if clicked outside
             bounds = self.param_widget.bounds()
@@ -543,6 +543,7 @@ class BreadboardSimulator:
             print("Modified Nodal Analysis:")
             voltages, currents = ModifiedNodalAnalysis(matrix, self.components, active_nodes)
             print("Voltages:", voltages)
+            print("Voltages:", ", ".join(component.name + " - " + str(component.voltage_drop) + "V" for component in self.components if component.name != "Battery"))
             print("Currents:", currents)
             return
         
@@ -591,9 +592,9 @@ class BreadboardSimulator:
                     elif isinstance(self.active_component, Battery):
                         self.active_component = Battery(0, 0, None, None, self.active_component.voltage)
                     elif isinstance(self.active_component, Resistor):
-                        self.active_component = Resistor(0, 0, None, None, self.active_component.resistance)
+                        self.active_component = Resistor(0, 0, None, None, self.active_component.resistance, 0.0)
                     elif isinstance(self.active_component, LED):
-                        self.active_component = LED(0, 0, None, None, 220, self.active_component.color)
+                        self.active_component = LED(0, 0, None, None, 220, 0.0, self.active_component.color)
                         
                     self.first_hole = None
                 return 
@@ -619,9 +620,9 @@ class BreadboardSimulator:
                             if self.active_component_txt == "Battery":
                                 self.active_component = Battery(0, 0, value)
                             elif self.active_component_txt == "Resistor":
-                                self.active_component = Resistor(0, 0, value)
+                                self.active_component = Resistor(0, 0, value, 0.0)
                             elif self.active_component_txt == "LED":
-                                self.active_component = LED(0, 0, 220, value)
+                                self.active_component = LED(0, 0, 220, 0.0, value)
                     self.handle_click(event.pos)
             
             self.screen.fill(BG_COLOR)

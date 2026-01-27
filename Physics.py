@@ -9,28 +9,47 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes):
     source_matrix = [row for i, row in enumerate(incidence_matrix) if components[i].name == "Battery"]
     load_matrix = np.atleast_2d(load_matrix)
     source_matrix = np.atleast_2d(source_matrix)
+
+    # Create Conductance Matrix
     G = np.zeros((len(loads), len(loads)))
     for i in range(len(loads)):
         for j in range(len(loads)):
             if i == j:
                 G[i][j] = 1/loads[i].resistance
+    
+    # Create Master Matrix
     Master = np.block([
         [load_matrix.T@G@load_matrix, source_matrix.T],
         [source_matrix, np.atleast_2d(np.zeros((len(source_matrix), len(source_matrix))))]
     ])
+
+    # Create Z Vector
     Z = np.zeros(len(active_nodes) + len(sources))
     for i, source in enumerate(sources):
         Z[i + len(active_nodes)] = source.voltage
     gnd_idx = active_nodes.index(0)
+
+    # Remove Ground Row and Column
     M_reduced = np.delete(Master, gnd_idx, axis=0)
     M_reduced = np.delete(M_reduced, gnd_idx, axis=1)
     Z_reduced = np.delete(Z, gnd_idx)
+
+    # Solve for Voltages
     x = np.linalg.solve(M_reduced, Z_reduced)
     voltages_reduced = x[:len(active_nodes)-1]
-    # Re-insert the 0.0V at the correct gnd_idx to align with active_nodes
     full_voltages = np.insert(voltages_reduced, gnd_idx, 0.0)
-    
     battery_currents = x[len(active_nodes)-1:]
+    
+    # Calculate voltage drops
+    voltage_dict = {}
+    for i, voltage in enumerate(full_voltages):
+        voltage_dict[active_nodes[i]] = voltage
+    for component in components:
+        if isinstance(component, Resistor):
+            component.voltage_drop = voltage_dict[component.node_id_1] - voltage_dict[component.node_id_2]
+        elif isinstance(component, LED):
+            component.voltage_drop = voltage_dict[component.node_id_1] - voltage_dict[component.node_id_2]
+    
     return full_voltages, battery_currents
     
 

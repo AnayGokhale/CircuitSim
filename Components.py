@@ -15,19 +15,21 @@ class Battery:
         self.voltage = voltage
         self.name = name
 class Resistor:
-    def __init__(self, node1, node2, node_id_1, node_id_2, resistance, name="Resistor"):
+    def __init__(self, node1, node2, node_id_1, node_id_2, resistance, voltage_drop, name="Resistor"):
         self.node1 = node1
         self.node2 = node2
         self.node_id_1 = node_id_1
         self.node_id_2 = node_id_2
         self.resistance = resistance
+        self.voltage_drop = voltage_drop
         self.name = name
 class LED:
-    def __init__(self, node1, node2, node_id_1, node_id_2, resistance, color, name="LED"):
+    def __init__(self, node1, node2, node_id_1, node_id_2, resistance, voltage_drop, color, name="LED"):
         self.node1 = node1
         self.node2 = node2
         self.node_id_1 = node_id_1
         self.node_id_2 = node_id_2
         self.resistance = resistance
+        self.voltage_drop = voltage_drop
         self.color = color
         self.name = name
