@@ -238,11 +238,18 @@ class BreadboardSimulator:
             "Power": 0.0
         }
     def load_assets(self):
-        self.component_images = {
-            "Battery": pygame.image.load(r"CircuitSim\assets\Battery.png"),
-            "Resistor": pygame.image.load(r"CircuitSim\assets\Resistor.png"),
-            "LED": pygame.image.load(r"CircuitSim\assets\LED.png")
-        }
+        try:
+            self.component_images = {
+                "Battery": pygame.image.load(r"assets\Battery.png"),
+                "Resistor": pygame.image.load(r"assets\Resistor.png"),
+                "LED": pygame.image.load(r"assets\LED.png")
+            }
+        except FileNotFoundError:
+            self.component_images = {
+                "Battery": pygame.image.load(r"CircuitSim\assets\Battery.png"),
+                "Resistor": pygame.image.load(r"CircuitSim\assets\Resistor.png"),
+                "LED": pygame.image.load(r"CircuitSim\assets\LED.png")
+            }
     def get_hole_pos(self, row, col):
         # Find hole by row/col
         for hole in self.holes:
@@ -490,7 +497,6 @@ class BreadboardSimulator:
         for btn in self.buttons:
             btn.draw(self.screen, self.font)
         self.run_button.draw(self.screen, self.font)
-
     def handle_click(self, pos):
         if self.param_widget:
             val = self.param_widget.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos))
@@ -534,10 +540,10 @@ class BreadboardSimulator:
             print("Incidence Matrix:")
             for row in matrix:
                 print(row)
-            G = ModifiedNodalAnalysis(matrix, self.components, active_nodes)
             print("Modified Nodal Analysis:")
-            for row in G:
-                print(row)
+            voltages, currents = ModifiedNodalAnalysis(matrix, self.components, active_nodes)
+            print("Voltages:", voltages)
+            print("Currents:", currents)
             return
         
         # Check holes for placement
@@ -590,8 +596,7 @@ class BreadboardSimulator:
                         self.active_component = LED(0, 0, None, None, 220, self.active_component.color)
                         
                     self.first_hole = None
-                return
-    
+                return 
     def run(self):
         # Main loop
         running = True
