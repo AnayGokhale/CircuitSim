@@ -86,15 +86,17 @@ class Button:
         surface.blit(text_surf, text_rect)
 
 class NumericCounter:
-# Simple numeric counter with + and - buttons
     def __init__(self, x, y, width, height, label, value=0, step=1, min_val=0, max_val=1000):
-        # We'll treat 'width' as the width of the value display area
         self.rect = pygame.Rect(x, y, width, height)
         self.value = value
         self.step = step
         self.min_val = min_val
         self.max_val = max_val
         self.label = label
+        
+        # Text input state
+        self.text = str(value)
+        self.active = False
         
         # Determine button layout relative to main value rect
         btn_w = 30
@@ -114,19 +116,20 @@ class NumericCounter:
         top = self.rect.y
         right = self.plus_rect.right
         bottom = self.rect.bottom
-        # Add extra width for label on left
         return pygame.Rect(left - 100, top, (right - left) + 100, bottom - top)
 
     def draw(self, surface, font):
-        # Label to the left of the value box (approx 90px left)
         label_surf = font.render(self.label, True, (0,0,0))
-        # Center label vertically
         label_y = self.rect.centery - label_surf.get_height() // 2
         surface.blit(label_surf, (self.rect.x - 90 - label_surf.get_width()//2, label_y))
 
-        # Value box
-        pygame.draw.rect(surface, (230,230,230), self.rect, border_radius=4)
-        val_surf = font.render(str(self.value), True, (0,0,0))
+        bg_color = (255, 255, 255) if self.active else (230, 230, 230)
+        pygame.draw.rect(surface, bg_color, self.rect, border_radius=4)
+        if self.active:
+            pygame.draw.rect(surface, (0, 100, 255), self.rect, 2, border_radius=4)
+
+        display_text = self.text if self.active else str(self.value)
+        val_surf = font.render(display_text, True, (0,0,0))
         surface.blit(val_surf, val_surf.get_rect(center=self.rect.center))
 
         # Buttons
@@ -139,10 +142,43 @@ class NumericCounter:
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.minus_rect.collidepoint(event.pos):
                 self.value = max(self.min_val, self.value - self.step)
+                self.text = str(self.value)
                 return self.value
             elif self.plus_rect.collidepoint(event.pos):
                 self.value = min(self.max_val, self.value + self.step)
+                self.text = str(self.value)
                 return self.value
+            elif self.rect.collidepoint(event.pos):
+                self.active = True
+                self.text = str(self.value)
+            else:
+                if self.active:
+                    try:
+                        val = int(self.text)
+                        self.value = min(self.max_val, max(self.min_val, val))
+                    except ValueError:
+                        pass
+                    self.text = str(self.value)
+                    self.active = False
+                    return self.value
+                self.active = False
+                self.text = str(self.value)
+
+        elif event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_RETURN:
+                try:
+                    val = int(self.text)
+                    self.value = min(self.max_val, max(self.min_val, val))
+                except ValueError:
+                    pass
+                self.text = str(self.value)
+                self.active = False
+                return self.value
+            elif event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            else:
+                if event.unicode.isdigit():
+                    self.text += event.unicode
         return None
 
 class Dropdown:
@@ -358,7 +394,7 @@ class BreadboardSimulator:
         if btn.text == "Battery":
             # Create numeric counter for voltage
             widget = NumericCounter(anchor_x + 80, anchor_y, 80, 30,
-                                    label="Voltage", value=9, step=1, min_val=1, max_val=24)
+                                    label="Voltage", value=9, step=1, min_val=1, max_val=100000000)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "Battery"
@@ -368,7 +404,7 @@ class BreadboardSimulator:
         elif btn.text == "Resistor":
             # Create numeric counter for resistance
             widget = NumericCounter(anchor_x + 80, anchor_y, 100, 30,
-                                    label="Resistance", value=330, step=10, min_val=10, max_val=100000)
+                                    label="Resistance", value=330, step=10, min_val=1, max_val=100000)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "Resistor"
@@ -499,22 +535,23 @@ class BreadboardSimulator:
         self.run_button.draw(self.screen, self.font)
     def handle_click(self, pos):
         if self.param_widget:
+            # Check for outside click logic
+            bounds = self.param_widget.bounds()
+            clicked_outside = not bounds.collidepoint(pos)
+
             val = self.param_widget.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos))
             if val is not None:
-                if self.param_for == "Battery":
-                    self.active_component = Battery(0, 0, None, None, self.param_widget.value)
-                elif self.param_for == "Resistor":
-                    self.active_component = Resistor(0, 0, None, None, self.param_widget.value, 0.0)
-                elif self.param_for == "LED":
-                    self.active_component = LED(0, 0, None, None, 20, 0.0, self.param_widget.selected_option)
-                return
+                self.update_active_component_param(val)
+                if not clicked_outside:
+                    return
+
             # close if clicked outside
-            bounds = self.param_widget.bounds()
-            if not bounds.collidepoint(pos):
+            if clicked_outside:
                 if isinstance(self.param_widget, Dropdown):
                     self.param_widget.expanded = False
                 self.param_widget = None
                 self.param_for = None
+
 
         # Check buttons
         for btn in self.buttons:
@@ -598,6 +635,14 @@ class BreadboardSimulator:
                         
                     self.first_hole = None
                 return 
+    def update_active_component_param(self, value):
+        if self.active_component_txt == "Battery":
+             self.active_component = Battery(0, 0, None, None, value)
+        elif self.active_component_txt == "Resistor":
+             self.active_component = Resistor(0, 0, None, None, value, 0.0)
+        elif self.active_component_txt == "LED":
+             self.active_component = LED(0, 0, None, None, 220, 0.0, value)
+
     def run(self):
         # Main loop
         running = True
@@ -607,6 +652,11 @@ class BreadboardSimulator:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
+                elif event.type == pygame.KEYDOWN:
+                    if self.param_widget:
+                        value = self.param_widget.handle_event(event)
+                        if value is not None:
+                            self.update_active_component_param(value)
                 elif event.type == pygame.MOUSEMOTION:
                     self.hovered_hole = None
                     for hole in self.holes:
