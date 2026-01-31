@@ -86,7 +86,9 @@ class Button:
         surface.blit(text_surf, text_rect)
 
 class NumericCounter:
+# Simple numeric counter with + and - buttons and text input
     def __init__(self, x, y, width, height, label, value=0, step=1, min_val=0, max_val=1000):
+        # We'll treat 'width' as the width of the value display area
         self.rect = pygame.Rect(x, y, width, height)
         self.value = value
         self.step = step
@@ -116,18 +118,24 @@ class NumericCounter:
         top = self.rect.y
         right = self.plus_rect.right
         bottom = self.rect.bottom
+        # Add extra width for label on left
         return pygame.Rect(left - 100, top, (right - left) + 100, bottom - top)
 
     def draw(self, surface, font):
+        # Label to the left of the value box (approx 90px left)
         label_surf = font.render(self.label, True, (0,0,0))
+        # Center label vertically
         label_y = self.rect.centery - label_surf.get_height() // 2
         surface.blit(label_surf, (self.rect.x - 90 - label_surf.get_width()//2, label_y))
 
+        # Value box
+        # Change background/border if active
         bg_color = (255, 255, 255) if self.active else (230, 230, 230)
         pygame.draw.rect(surface, bg_color, self.rect, border_radius=4)
         if self.active:
             pygame.draw.rect(surface, (0, 100, 255), self.rect, 2, border_radius=4)
 
+        # Show text if active, else value
         display_text = self.text if self.active else str(self.value)
         val_surf = font.render(display_text, True, (0,0,0))
         surface.blit(val_surf, val_surf.get_rect(center=self.rect.center))
@@ -542,6 +550,7 @@ class BreadboardSimulator:
             val = self.param_widget.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos))
             if val is not None:
                 self.update_active_component_param(val)
+                # If we updated value but didn't click outside, we stay open
                 if not clicked_outside:
                     return
 
