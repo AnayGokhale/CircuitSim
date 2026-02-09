@@ -58,6 +58,7 @@ class Hole:
         self.is_rail = is_rail
         self.radius = HOLE_SIZE // 2
         self.node_id = node_id
+        self.occupied = False
         
     def draw(self, surface, color=HOLE_COLOR):
         pygame.draw.circle(surface, color, (self.x, self.y), self.radius)
@@ -260,6 +261,7 @@ class BreadboardSimulator:
         self.components = []
         self.mergers = []
         self.param_widget = None
+        self.selected_component = None
 
         # Create UI
         self.create_buttons()
@@ -292,11 +294,96 @@ class BreadboardSimulator:
             if hole.row == row and hole.col == col:
                 return (hole.x, hole.y)
         return (0, 0)
+    def distance_point_to_segment(self, point, start, end):
+        px, py = point
+        x1, y1 = start
+        x2, y2 = end
+        
+        dx = x2 - x1
+        dy = y2 - y1
+        if dx == 0 and dy == 0:
+            return ((px - x1)**2 + (py - y1)**2)**0.5
+
+        t = ((px - x1) * dx + (py - y1) * dy) / (dx*dx + dy*dy)
+        t = max(0, min(1, t))
+        
+        closest_x = x1 + t * dx
+        closest_y = y1 + t * dy
+        
+        return ((px - closest_x)**2 + (py - closest_y)**2)**0.5
+
+    def get_component_at_pos(self, pos):
+        all_items = self.components + self.mergers
+        
+        closest_dist = 15
+        closest_item = None
+        
+        for item in all_items:
+            start = self.get_hole_pos(*item.node1)
+            end = self.get_hole_pos(*item.node2)
+            dist = self.distance_point_to_segment(pos, start, end)
+            
+            if dist < closest_dist:
+                closest_dist = dist
+                closest_item = item
+                
+        return closest_item
+
+    def delete_selected_component(self):
+        if not self.selected_component:
+            return
+
+        comp = self.selected_component
+        
+        # Free holes
+        h1 = self.get_hole_by_node(comp.node1)
+        h2 = self.get_hole_by_node(comp.node2)
+        if h1: h1.occupied = False
+        if h2: h2.occupied = False
+        
+        # Remove from lists
+        if comp in self.components:
+            self.components.remove(comp)
+        if comp in self.mergers:
+            self.mergers.remove(comp)
+            
+        self.selected_component = None
+        
+        # Rebuild circuit connectivity
+        self.rebuild_circuit()
+
+    def get_hole_by_node(self, node_tuple):
+        r, c = node_tuple
+        for h in self.holes:
+            if h.row == r and h.col == c:
+                return h
+        return None
+
+    def rebuild_circuit(self):
+        # Reset UF
+        self.init_node_system()
+        
+        for wire in self.mergers:
+             h1 = self.get_hole_by_node(wire.node1)
+             h2 = self.get_hole_by_node(wire.node2)
+             if h1 and h2:
+                 prev_id = max(h1.node_id, h2.node_id)
+                 target_id = min(h1.node_id, h2.node_id)
+                 self.uf.union(h1, h2)
+                 self.uf.set_id(h1, target_id)
+        
+        self.sync_node_ids()
+
+        for comp in self.components:
+             h1 = self.get_hole_by_node(comp.node1)
+             h2 = self.get_hole_by_node(comp.node2)
+             if h1: comp.node_id_1 = h1.node_id
+             if h2: comp.node_id_2 = h2.node_id
+
     def draw_component(self, component):
         start_pos = self.get_hole_pos(*component.node1)
         end_pos = self.get_hole_pos(*component.node2)
         
-        # Calculate midpoint, length, angle
         mid_x = (start_pos[0] + end_pos[0]) / 2
         mid_y = (start_pos[1] + end_pos[1]) / 2
         
@@ -305,12 +392,21 @@ class BreadboardSimulator:
         length = (dx**2 + dy**2)**0.5
         angle = math.degrees(math.atan2(-dy, dx)) + 180
 
-        # Draw wire/leads
+        if component == self.selected_component:
+            if component.name == "Wire":
+                pygame.draw.line(self.screen, (255, 255, 0), start_pos, end_pos, 8)
+            else:
+                 body_length = 40
+                 surf = pygame.Surface((length + 10, 30), pygame.SRCALPHA)
+                 pygame.draw.rect(surf, (255, 255, 0), (0, 0, length + 10, 30), border_radius=5)
+                 rotated_surf = pygame.transform.rotate(surf, angle)
+                 rect = rotated_surf.get_rect(center=(mid_x, mid_y))
+                 self.screen.blit(rotated_surf, rect)
+
         if component.name == "Wire":
             pygame.draw.line(self.screen, (50, 50, 50), start_pos, end_pos, 4)
             return
-
-        # For other components draw leads to a central area
+            
         body_length = 40
         if length > body_length:
             scale = (length - body_length) / 2 / length
@@ -533,7 +629,24 @@ class BreadboardSimulator:
         for btn in self.buttons:
             btn.draw(self.screen, self.font)
         self.run_button.draw(self.screen, self.font)
-    def handle_click(self, pos):
+    def handle_click(self, pos, button=1):
+        # Right click for selection
+        if button == 3:
+            # Try to find component
+            item = self.get_component_at_pos(pos)
+            if item:
+                self.selected_component = item
+                # Deselect buttons if we selected a component
+                for b in self.buttons: b.selected = False
+                self.active_component_txt = "Selection"
+            else:
+                self.selected_component = None
+            return
+
+        # If we are in Selection mode (implied by having a selected component), left click on empty space could deselect
+        # But user wants specific behavior. Let's stick to: Left click does normal things. 
+        # Only right click selects.
+        
         if self.param_widget:
             # Check for outside click logic
             bounds = self.param_widget.bounds()
@@ -560,6 +673,7 @@ class BreadboardSimulator:
                     b.selected = False
                 btn.selected = True
                 self.active_component_txt = btn.text
+                self.selected_component = None # Deselect component when changing tool
                 if btn.text == "Wire":
                     self.active_component = Wire(0, 0)
                     self.param_widget = None
@@ -587,6 +701,10 @@ class BreadboardSimulator:
         # Check holes for placement
         for hole in self.holes:
             if hole.contains(pos):
+                # Cannot use occupied holes
+                if hole.occupied:
+                    return
+
                 if self.first_hole is None:
                     if isinstance(self.active_component, Battery):
                         if hole == self.holes[0]:
@@ -633,6 +751,10 @@ class BreadboardSimulator:
                     elif isinstance(self.active_component, LED):
                         self.active_component = LED(0, 0, None, None, 220, 0.0, self.active_component.color)
                         
+                    # Mark holes as occupied
+                    self.first_hole.occupied = True
+                    hole.occupied = True
+                    
                     self.first_hole = None
                 return 
     def update_active_component_param(self, value):
@@ -651,12 +773,14 @@ class BreadboardSimulator:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
-                    self.handle_click(event.pos)
+                    self.handle_click(event.pos, event.button)
                 elif event.type == pygame.KEYDOWN:
                     if self.param_widget:
                         value = self.param_widget.handle_event(event)
                         if value is not None:
                             self.update_active_component_param(value)
+                    elif event.key == pygame.K_DELETE or event.key == pygame.K_BACKSPACE:
+                        self.delete_selected_component()
                 elif event.type == pygame.MOUSEMOTION:
                     self.hovered_hole = None
                     for hole in self.holes:
@@ -673,7 +797,7 @@ class BreadboardSimulator:
                                 self.active_component = Resistor(0, 0, value, 0.0)
                             elif self.active_component_txt == "LED":
                                 self.active_component = LED(0, 0, 220, 0.0, value)
-                    self.handle_click(event.pos)
+                    self.handle_click(event.pos, event.button)
             
             self.screen.fill(BG_COLOR)
             
