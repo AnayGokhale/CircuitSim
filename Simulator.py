@@ -237,6 +237,85 @@ class Dropdown:
                 self.expanded = False
         return None
 
+
+class SidePanel:
+    def __init__(self, x, y, width, height):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.component = None
+        self.visible = False
+        self.font = pygame.font.Font(None, 24)
+        self.title_font = pygame.font.Font(None, 32)
+        
+    def set_component(self, component):
+        self.component = component
+        self.visible = True
+        
+    def draw(self, surface):
+        if not self.visible or not self.component:
+            return
+            
+        # Draw panel background
+        pygame.draw.rect(surface, PANEL_COLOR, self.rect, border_radius=10)
+        pygame.draw.rect(surface, (200, 200, 200), self.rect, 2, border_radius=10)
+        
+        # Title
+        title = self.component.name
+        title_surf = self.title_font.render(title, True, (0, 0, 0))
+        surface.blit(title_surf, (self.rect.x + 20, self.rect.y + 20))
+        
+        y_offset = 60
+        line_height = 30
+        
+        def draw_text(text, val_color=(0,0,0)):
+            nonlocal y_offset
+            surf = self.font.render(text, True, val_color)
+            surface.blit(surf, (self.rect.x + 20, self.rect.y + y_offset))
+            y_offset += line_height
+
+        # Properties based on type
+        if isinstance(self.component, Resistor):
+            draw_text(f"Resistance: {self.component.resistance} " + chr(0x2126))
+            draw_text(f"Voltage Drop: {self.component.voltage_drop:.2f} V")
+            draw_text(f"Current: {self.component.current*1000:.2f} mA")
+            
+        elif isinstance(self.component, Battery):
+            draw_text(f"Voltage: {self.component.voltage} V")
+            draw_text(f"Current Output: {abs(self.component.current)*1000:.2f} mA")
+            
+        elif isinstance(self.component, LED):
+            draw_text(f"Color: {self.component.color}")
+            draw_text(f"Voltage Drop: {self.component.voltage_drop:.2f} V")
+            draw_text(f"Current: {self.component.current*1000:.2f} mA")
+            
+            # Brightness 
+            b_val = getattr(self.component, 'brightness', 0)
+            draw_text(f"Brightness: {b_val:.1f}%")
+            
+            # Draw a purity bar for brightness
+            bar_rect = pygame.Rect(self.rect.x + 20, self.rect.y + y_offset, self.rect.width - 40, 10)
+            pygame.draw.rect(surface, (50, 50, 50), bar_rect)
+            fill_width = (b_val / 100.0) * (self.rect.width - 40)
+            
+            # Use LED color for the bar
+            c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
+                     "yellow": (255, 255, 0), "white": (255, 255, 255)}
+            bar_color = c_map.get(self.component.color, (255, 255, 255))
+            
+            if fill_width > 0:
+                pygame.draw.rect(surface, bar_color, (bar_rect.x, bar_rect.y, fill_width, 10))
+            y_offset += 20
+            
+        elif isinstance(self.component, Wire):
+            draw_text(f"Current: N/A") # Placeholder as wires are ideal
+            draw_text("Connections:")
+            if hasattr(self.component, 'connected_components'):
+                for name in self.component.connected_components:
+                    draw_text(f"- {name}", (100, 100, 100))
+        
+        # Connection Nodes info (Debug mostly, but useful)
+        y_offset += 10
+        draw_text(f"Nodes: {self.component.node_id_1} <-> {self.component.node_id_2}", (150, 150, 150))
+
 class BreadboardSimulator:
 # Main application class
     def __init__(self):
@@ -267,6 +346,8 @@ class BreadboardSimulator:
         self.create_buttons()
         self.create_holes()
         self.load_assets()
+        
+        self.side_panel = SidePanel(920, 150, 260, 450)
         
         # Measurements
         self.measurements = {
@@ -360,7 +441,6 @@ class BreadboardSimulator:
         return None
 
     def rebuild_circuit(self):
-        # Reset UF
         self.init_node_system()
         
         for wire in self.mergers:
@@ -379,6 +459,23 @@ class BreadboardSimulator:
              h2 = self.get_hole_by_node(comp.node2)
              if h1: comp.node_id_1 = h1.node_id
              if h2: comp.node_id_2 = h2.node_id
+
+    def get_connected_components(self, wire):
+        h1 = self.get_hole_by_node(wire.node1)
+        h2 = self.get_hole_by_node(wire.node2)
+        
+        connected_names = []
+        
+        if not h1 or not h2:
+            return []
+            
+        target_ids = {h1.node_id, h2.node_id}
+        
+        for comp in self.components:
+            if comp.node_id_1 in target_ids or comp.node_id_2 in target_ids:
+                connected_names.append(comp.name)
+                 
+        return list(set(connected_names))
 
     def draw_component(self, component):
         start_pos = self.get_hole_pos(*component.node1)
@@ -440,12 +537,10 @@ class BreadboardSimulator:
         if component.name == "Battery":
             color = (50, 50, 50)
             label = f"{component.voltage}V"
-            # Draw battery symbol simplified (just a box for now)
             pygame.draw.rect(surf, color, (0, 0, length, 20), border_radius=4)
-            # Polarity visual
             pygame.draw.rect(surf, (200, 200, 200), (4, 4, length-8, 12)) 
-            pygame.draw.line(surf, (0,0,0), (length//2 - 5, 10), (length//2 + 5, 10), 2) # Minus
-            pygame.draw.line(surf, (0,0,0), (length//2, 5), (length//2, 15), 2) # Plus (vertical part)
+            pygame.draw.line(surf, (0,0,0), (length//2 - 5, 10), (length//2 + 5, 10), 2)
+            pygame.draw.line(surf, (0,0,0), (length//2, 5), (length//2, 15), 2)
 
         elif component.name == "Resistor":
             color = (210, 180, 140)
@@ -629,6 +724,10 @@ class BreadboardSimulator:
         for btn in self.buttons:
             btn.draw(self.screen, self.font)
         self.run_button.draw(self.screen, self.font)
+        
+        # Draw Side Panel
+        if self.side_panel.visible:
+            self.side_panel.draw(self.screen)
     def handle_click(self, pos, button=1):
         # Right click for selection
         if button == 3:
@@ -639,8 +738,16 @@ class BreadboardSimulator:
                 # Deselect buttons if we selected a component
                 for b in self.buttons: b.selected = False
                 self.active_component_txt = "Selection"
+                
+                # Update Side Panel
+                if isinstance(item, Wire):
+                    # Find connected components
+                    item.connected_components = self.get_connected_components(item)
+                
+                self.side_panel.set_component(item)
             else:
                 self.selected_component = None
+                self.side_panel.visible = False
             return
 
         # If we are in Selection mode (implied by having a selected component), left click on empty space could deselect

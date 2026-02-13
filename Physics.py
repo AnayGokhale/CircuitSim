@@ -40,18 +40,41 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes):
     full_voltages = np.insert(voltages_reduced, gnd_idx, 0.0)
     battery_currents = x[len(active_nodes)-1:]
     
-    # Calculate voltage drops
+    # Calculate voltage drops and currents
     voltage_dict = {}
     for i, voltage in enumerate(full_voltages):
         voltage_dict[active_nodes[i]] = voltage
+
+    for i, source in enumerate(sources):
+        source.current = float(battery_currents[i])
+
     for component in components:
-        if isinstance(component, Resistor):
-            component.voltage_drop = voltage_dict[component.node_id_1] - voltage_dict[component.node_id_2]
-        elif isinstance(component, LED):
-            component.voltage_drop = voltage_dict[component.node_id_1] - voltage_dict[component.node_id_2]
+        if isinstance(component, Resistor) or isinstance(component, LED):
+            v1 = voltage_dict.get(component.node_id_1, 0)
+            v2 = voltage_dict.get(component.node_id_2, 0)
+            component.voltage_drop = abs(v1 - v2)
+            if component.resistance > 0:
+                component.current = component.voltage_drop / component.resistance
+            else:
+                component.current = 0
+            
+            if isinstance(component, LED):
+                component.brightness = calculate_brightness(component)
     
     return full_voltages, battery_currents
+
+def calculate_brightness(led_component):
+    MAX_POWER = 0.040 
     
+    if led_component.current <= 0:
+        return 0.0
+        
+    power = led_component.current * led_component.voltage_drop
+    
+    # Brightness as percentage of max power
+    percentage = (power / MAX_POWER) * 100
+    
+    return max(0.0, min(100.0, percentage))
 
 def generate_incidence_matrix(components, active_nodes):
     incidence_matrix = np.zeros((len(components), len(active_nodes)))
