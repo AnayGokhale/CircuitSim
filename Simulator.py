@@ -87,12 +87,12 @@ class Button:
         surface.blit(text_surf, text_rect)
 
 class NumericCounter:
-    def __init__(self, x, y, width, height, label, value=0, step=1, min_val=0, max_val=1000):
+    def __init__(self, x, y, width, height, label, value=0.0, step=1.0, min_val=0.0, max_val=1000.0):
         self.rect = pygame.Rect(x, y, width, height)
-        self.value = value
-        self.step = step
-        self.min_val = min_val
-        self.max_val = max_val
+        self.value = float(value)
+        self.step = float(step)
+        self.min_val = float(min_val)
+        self.max_val = float(max_val)
         self.label = label
         
         # Text input state
@@ -129,7 +129,8 @@ class NumericCounter:
         if self.active:
             pygame.draw.rect(surface, (0, 100, 255), self.rect, 2, border_radius=4)
 
-        display_text = self.text if self.active else str(self.value)
+
+        display_text = self.text if self.active else f"{self.value:.2f}".rstrip('0').rstrip('.')
         val_surf = font.render(display_text, True, (0,0,0))
         surface.blit(val_surf, val_surf.get_rect(center=self.rect.center))
 
@@ -143,42 +144,42 @@ class NumericCounter:
         if event.type == pygame.MOUSEBUTTONDOWN:
             if self.minus_rect.collidepoint(event.pos):
                 self.value = max(self.min_val, self.value - self.step)
-                self.text = str(self.value)
+                self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
                 return self.value
             elif self.plus_rect.collidepoint(event.pos):
                 self.value = min(self.max_val, self.value + self.step)
-                self.text = str(self.value)
+                self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
                 return self.value
             elif self.rect.collidepoint(event.pos):
                 self.active = True
-                self.text = str(self.value)
+                self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
             else:
                 if self.active:
                     try:
-                        val = int(self.text)
+                        val = float(self.text)
                         self.value = min(self.max_val, max(self.min_val, val))
                     except ValueError:
                         pass
-                    self.text = str(self.value)
+                    self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
                     self.active = False
                     return self.value
                 self.active = False
-                self.text = str(self.value)
+                self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
 
         elif event.type == pygame.KEYDOWN and self.active:
             if event.key == pygame.K_RETURN:
                 try:
-                    val = int(self.text)
+                    val = float(self.text)
                     self.value = min(self.max_val, max(self.min_val, val))
                 except ValueError:
                     pass
-                self.text = str(self.value)
+                self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
                 self.active = False
                 return self.value
             elif event.key == pygame.K_BACKSPACE:
                 self.text = self.text[:-1]
             else:
-                if event.unicode.isdigit():
+                if event.unicode.isdigit() or (event.unicode == '.' and '.' not in self.text):
                     self.text += event.unicode
         return None
 
@@ -238,6 +239,31 @@ class Dropdown:
         return None
 
 
+def format_si(value, unit):
+    if value == 0:
+        return f"0.00 {unit}"
+    
+    abs_val = abs(value)
+    sign = "-" if value < 0 else ""
+    
+    if abs_val < 1e-9:
+        return f"{sign}{abs_val*1e12:.2f} p{unit}"
+    elif abs_val < 1e-6:
+        return f"{sign}{abs_val*1e9:.2f} n{unit}"
+    elif abs_val < 1e-3:
+        return f"{sign}{abs_val*1e6:.2f} µ{unit}"
+    elif abs_val < .1:
+        return f"{sign}{abs_val*1e3:.2f} m{unit}"
+    elif abs_val >= 1e9:
+        return f"{sign}{abs_val/1e9:.2f} G{unit}"
+    elif abs_val >= 1e6:
+        return f"{sign}{abs_val/1e6:.2f} M{unit}"
+    elif abs_val >= 1e3:
+        return f"{sign}{abs_val/1e3:.2f} k{unit}"
+    else:
+        return f"{sign}{abs_val:.2f} {unit}"
+
+
 class SidePanel:
     def __init__(self, x, y, width, height):
         self.rect = pygame.Rect(x, y, width, height)
@@ -274,18 +300,21 @@ class SidePanel:
 
         # Properties based on type
         if isinstance(self.component, Resistor):
-            draw_text(f"Resistance: {self.component.resistance} " + chr(0x2126))
-            draw_text(f"Voltage Drop: {self.component.voltage_drop:.2f} V")
-            draw_text(f"Current: {self.component.current*1000:.2f} mA")
+            draw_text(f"Resistance: {format_si(self.component.resistance, chr(0x2126))}")
+            draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
+            draw_text(f"Current: {format_si(self.component.current, 'A')}")
             
         elif isinstance(self.component, Battery):
-            draw_text(f"Voltage: {self.component.voltage} V")
-            draw_text(f"Current Output: {abs(self.component.current)*1000:.2f} mA")
+            draw_text(f"Voltage: {format_si(self.component.voltage, 'V')}")
+            draw_text(f"Current: {format_si(abs(self.component.current), 'A')}")
             
         elif isinstance(self.component, LED):
+            c_map_rev = {v: k for k, v in {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
+                     "yellow": (255, 255, 0), "white": (255, 255, 255)}.items()}
+            # self.component.color is a string name
             draw_text(f"Color: {self.component.color}")
-            draw_text(f"Voltage Drop: {self.component.voltage_drop:.2f} V")
-            draw_text(f"Current: {self.component.current*1000:.2f} mA")
+            draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
+            draw_text(f"Current: {format_si(self.component.current, 'A')}")
             
             # Brightness 
             b_val = getattr(self.component, 'brightness', 0)
@@ -306,11 +335,39 @@ class SidePanel:
             y_offset += 20
             
         elif isinstance(self.component, Wire):
-            draw_text(f"Current: N/A") # Placeholder as wires are ideal
-            draw_text("Connections:")
-            if hasattr(self.component, 'connected_components'):
-                for name in self.component.connected_components:
-                    draw_text(f"- {name}", (100, 100, 100))
+            draw_text("Connected Current:")
+            
+            connected_comps = getattr(self.component, 'connected_components', [])
+            # Filter out batteries
+            non_batteries = [c for c in connected_comps if not isinstance(c, Battery)]
+            
+            target_comp = None
+            if len(non_batteries) == 1:
+                target_comp = non_batteries[0]
+            elif len(non_batteries) > 1:
+                # Prefer component at node1
+                # component nodes are tuples (r, c)
+                w_start = self.component.node1
+                
+                # Check if any component shares this exact start node
+                start_matches = [c for c in non_batteries if c.node1 == w_start or c.node2 == w_start]
+                
+                if start_matches:
+                    target_comp = start_matches[0]
+                else:
+                    # Just take the first one
+                    target_comp = non_batteries[0]
+            
+            if target_comp:
+                val = getattr(target_comp, 'current', 0)
+                draw_text(f"{target_comp.name}: {format_si(val, 'A')}")
+            else:
+                draw_text("N/A", (100, 100, 100))
+                
+            y_offset += 10
+            draw_text("Connections:", (0,0,0))
+            for comp in connected_comps:
+                 draw_text(f"- {comp.name}", (100, 100, 100))
         
         # Connection Nodes info (Debug mostly, but useful)
         y_offset += 10
@@ -355,6 +412,13 @@ class BreadboardSimulator:
             "Voltage": 0.0,
             "Resistance": 0.0,
             "Power": 0.0
+        }
+        
+        # Persistent defaults
+        self.component_defaults = {
+            "Battery": 9.0,
+            "Resistor": 330,
+            "LED": "red"
         }
     def load_assets(self):
         try:
@@ -471,11 +535,13 @@ class BreadboardSimulator:
             
         target_ids = {h1.node_id, h2.node_id}
         
+        connected_comps = []
+        
         for comp in self.components:
-            if comp.node_id_1 in target_ids or comp.node_id_2 in target_ids:
-                connected_names.append(comp.name)
+             if comp.node_id_1 in target_ids or comp.node_id_2 in target_ids:
+                 connected_comps.append(comp)
                  
-        return list(set(connected_names))
+        return list(set(connected_comps))
 
     def draw_component(self, component):
         start_pos = self.get_hole_pos(*component.node1)
@@ -584,8 +650,9 @@ class BreadboardSimulator:
 
         if btn.text == "Battery":
             # Create numeric counter for voltage
+            default_val = self.component_defaults.get("Battery", 9.0)
             widget = NumericCounter(anchor_x + 80, anchor_y, 80, 30,
-                                    label="Voltage", value=9, step=1, min_val=1, max_val=100000000)
+                                    label="Voltage", value=default_val, step=1, min_val=1, max_val=100000000)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "Battery"
@@ -594,8 +661,9 @@ class BreadboardSimulator:
 
         elif btn.text == "Resistor":
             # Create numeric counter for resistance
+            default_val = self.component_defaults.get("Resistor", 330)
             widget = NumericCounter(anchor_x + 80, anchor_y, 100, 30,
-                                    label="Resistance", value=330, step=10, min_val=1, max_val=100000)
+                                    label="Resistance", value=default_val, step=10, min_val=1, max_val=100000)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "Resistor"
@@ -603,8 +671,9 @@ class BreadboardSimulator:
 
         elif btn.text == "LED":
             # Create dropdown for LED color
+            default_val = self.component_defaults.get("LED", "red")
             widget = Dropdown(anchor_x + 80, anchor_y, 100, 30,
-                              label="Color", options=["red","green","blue","yellow","white"], default="red")
+                              label="Color", options=["red","green","blue","yellow","white"], default=default_val)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "LED"
@@ -750,10 +819,6 @@ class BreadboardSimulator:
                 self.side_panel.visible = False
             return
 
-        # If we are in Selection mode (implied by having a selected component), left click on empty space could deselect
-        # But user wants specific behavior. Let's stick to: Left click does normal things. 
-        # Only right click selects.
-        
         if self.param_widget:
             # Check for outside click logic
             bounds = self.param_widget.bounds()
@@ -826,6 +891,9 @@ class BreadboardSimulator:
                     self.active_component.node_id_1 = hole.node_id
                     print(f"Start: row={hole.row}, col={hole.col}, rail={hole.is_rail} [Node {hole.node_id}]")
                 else:
+                    if hole == self.first_hole:
+                        return
+                        
                     self.active_component.node1 = (self.first_hole.row, self.first_hole.col)
                     self.active_component.node2 = (hole.row, hole.col)
                     self.active_component.node_id_2 = hole.node_id
@@ -867,10 +935,13 @@ class BreadboardSimulator:
     def update_active_component_param(self, value):
         if self.active_component_txt == "Battery":
              self.active_component = Battery(0, 0, None, None, value)
+             self.component_defaults["Battery"] = value
         elif self.active_component_txt == "Resistor":
              self.active_component = Resistor(0, 0, None, None, value, 0.0)
+             self.component_defaults["Resistor"] = value
         elif self.active_component_txt == "LED":
              self.active_component = LED(0, 0, None, None, 220, 0.0, value)
+             self.component_defaults["LED"] = value
 
     def run(self):
         # Main loop
