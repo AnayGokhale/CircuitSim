@@ -6,14 +6,29 @@ from Physics import generate_incidence_matrix, ModifiedNodalAnalysis
 # Initialize Pygame
 pygame.init()
 
+RESISTOR_COLORS = {
+    "black": (0, 0, 0),
+    "brown": (139, 69, 19),
+    "red": (255, 0, 0),
+    "orange": (255, 165, 0),
+    "yellow": (255, 255, 0),
+    "green": (0, 128, 0),
+    "blue": (0, 0, 255),
+    "violet": (238, 130, 238),
+    "gray": (128, 128, 128),
+    "white": (255, 255, 255),
+    "gold": (212, 175, 55),
+    "silver": (192, 192, 192)
+}
+
 # Constants
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 700
-BREADBOARD_COLOR = (220, 200, 170)
+BREADBOARD_COLOR = (255, 255, 255)
 HOLE_SIZE = 8
 HOLE_COLOR = (40, 40, 40)
 HOLE_SPACING = 20
-BG_COLOR = (245, 245, 250)
+BG_COLOR = (230, 230, 235) # Light Grey
 PANEL_COLOR = (230, 230, 235)
 BUTTON_COLOR = (70, 130, 180)
 BUTTON_HOVER = (100, 160, 210)
@@ -569,7 +584,11 @@ class BreadboardSimulator:
         if component.name == "Wire":
             pygame.draw.line(self.screen, (50, 50, 50), start_pos, end_pos, 4)
             return
-            
+
+        if component.name == "Resistor":
+            self.draw_custom_resistor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
+            return
+
         body_length = 40
         if length > body_length:
             scale = (length - body_length) / 2 / length
@@ -593,11 +612,58 @@ class BreadboardSimulator:
         else:
             # Fallback drawing
             self.draw_fallback_component(component, mid_x, mid_y, angle, body_length)
+    def draw_custom_resistor(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
+        dx = end_pos[0] - start_pos[0]
+        dy = end_pos[1] - start_pos[1]
+        correct_angle = math.degrees(math.atan2(-dy, dx))
+        body_length = 40
+        height = 15
+        
+        if length > body_length:
+            scale = (length - body_length) / 2 / length
+            lead1_end = (start_pos[0] + dx * scale, start_pos[1] + dy * scale)
+            lead2_start = (end_pos[0] - dx * scale, end_pos[1] - dy * scale)
+            
+            pygame.draw.line(self.screen, (150, 150, 150), start_pos, lead1_end, 2)
+            pygame.draw.line(self.screen, (150, 150, 150), lead2_start, end_pos, 2)
+        
+        surf = pygame.Surface((body_length, height), pygame.SRCALPHA)
+         
+        body_color = (222, 184, 135)
+        
+        width = body_length
+        
+        end_w = width * 0.15
+        center_w = width - (2 * end_w)
+        
+        left_cap_rect = pygame.Rect(0, 0, end_w * 1.5, height)
+        pygame.draw.ellipse(surf, body_color, left_cap_rect)
+        
+        right_cap_rect = pygame.Rect(width - end_w * 1.5, 0, end_w * 1.5, height)
+        pygame.draw.ellipse(surf, body_color, right_cap_rect)
+        
+        center_rect = pygame.Rect(end_w, height*0.1, center_w, height*0.8)
+        pygame.draw.rect(surf, body_color, center_rect)
+        
+        bands = component.get_color_bands(component.resistance)
+        band_w = width * 0.08
+        
+        positions = [0.2, 0.35, 0.5, 0.8]
+        
+        for i, band_name in enumerate(bands):
+            color = RESISTOR_COLORS.get(band_name, (0,0,0))
+            bx = width * positions[i]
+            rect = pygame.Rect(bx, 0, band_w, height)
+            pygame.draw.rect(surf, color, rect)
+
+        rotated_surf = pygame.transform.rotate(surf, correct_angle)
+        rect = rotated_surf.get_rect(center=(mid_x, mid_y))
+        self.screen.blit(rotated_surf, rect)
+
     def draw_fallback_component(self, component, x, y, angle, length):
-        # Create a surface for the component body to easily rotate it
         surf = pygame.Surface((length, 20), pygame.SRCALPHA)
         
-        color = (200, 200, 200) # Default
+        color = (200, 200, 200)
         label = ""
         
         if component.name == "Battery":
@@ -627,7 +693,7 @@ class BreadboardSimulator:
         rect = rotated_surf.get_rect(center=(x, y))
         self.screen.blit(rotated_surf, rect)
         
-        # Draw label near component (not rotated for readability)
+        # Draw label near component
         if label:
             text = self.small_font.render(str(label), True, (0, 0, 0))
             self.screen.blit(text, (x - 10, y - 25))
@@ -643,7 +709,6 @@ class BreadboardSimulator:
             self.buttons.append(btn)
         self.run_button = Button(570, 30, 120, 45, "Run", None)
     def open_param_widget_for(self, btn):
-        # Anchor directly below the clicked button
         anchor_x = btn.rect.x
         anchor_y = btn.rect.bottom + 6
         self.param_button_rect = btn.rect
