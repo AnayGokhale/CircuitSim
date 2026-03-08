@@ -1157,15 +1157,22 @@ class BreadboardSimulator:
         active_nodes = list(set([c.node_id_1 for c in self.components] + [c.node_id_2 for c in self.components]))
         tau = calculate_time_constant(self.components)
         self.current_tau = tau
-        dt = tau / 60.0 if tau else 1/60.0
-        self.current_dt = dt
+        dt_base = tau / 60.0 if tau else 1/60.0
+        self.current_dt = dt_base
         
-        steps = int(target_time / dt) if dt > 0 else 0
+        dt_sim = dt_base / 100.0 if dt_base > 0 else 1/6000.0
+        steps = int(target_time / dt_sim) if dt_sim > 0 else 0
+        remainder = target_time - (steps * dt_sim)
+        
         matrix = generate_incidence_matrix(self.components, active_nodes)
         
         # Simulate forward
         for _ in range(steps):
-             ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=dt)
+             ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=dt_sim)
+             
+        # Simulate exact remainder
+        if remainder > 1e-6:
+             ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=remainder)
 
     def run(self):
         # Main loop
@@ -1212,10 +1219,15 @@ class BreadboardSimulator:
                         matrix = generate_incidence_matrix(self.components, active_nodes)
                         tau = calculate_time_constant(self.components)
                         self.current_tau = tau
-                        dt = tau / 60.0 if tau else 1/60.0
-                        self.current_dt = dt
-                        ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=dt)
-                        self.sim_time += dt
+                        dt_base = tau / 60.0 if tau else 1/60.0
+                        self.current_dt = dt_base
+                        
+                        substeps = 10
+                        dt_sim = dt_base / substeps
+                        for _ in range(substeps):
+                            ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=dt_sim)
+                            
+                        self.sim_time += dt_base
                     except Exception as e:
                         print(f"Simulation error: {e}")
                         self.is_simulating = False
