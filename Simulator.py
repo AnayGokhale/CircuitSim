@@ -1,8 +1,8 @@
 import pygame
 import sys
 import math
-from Components import Wire, Battery, Resistor, LED
-from Physics import generate_incidence_matrix, ModifiedNodalAnalysis
+from Components import Wire, Battery, Resistor, Capacitor, LED
+from Physics import generate_incidence_matrix, ModifiedNodalAnalysis, calculate_time_constant
 # Initialize Pygame
 pygame.init()
 
@@ -187,14 +187,14 @@ class NumericCounter:
                     val = float(self.text)
                     self.value = min(self.max_val, max(self.min_val, val))
                 except ValueError:
-                    pass
+                     pass
                 self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
                 self.active = False
                 return self.value
             elif event.key == pygame.K_BACKSPACE:
                 self.text = self.text[:-1]
             else:
-                if event.unicode.isdigit() or (event.unicode == '.' and '.' not in self.text):
+                if event.unicode.isdigit() or (event.unicode == '.' and '.' not in self.text) or (event.unicode == '-' and '-' not in self.text and len(self.text) == 0):
                     self.text += event.unicode
         return None
 
@@ -253,37 +253,61 @@ class Dropdown:
                 self.expanded = False
         return None
 
+class UnitDropdown(Dropdown):
+    def __init__(self, x, y, width, height, options, default):
+        super().__init__(x, y, width, height, "", options, default)
+        
+    def draw(self, surface, font):
+        # Main box
+        pygame.draw.rect(surface, (210,210,210), self.rect, border_radius=4)
+        text_surf = font.render(str(self.selected_option), True, (0,0,0))
+        surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
 
-def format_si(value, unit):
+        if self.expanded:
+            for i, opt in enumerate(self.options):
+                opt_rect = self.option_rect(i)
+                pygame.draw.rect(surface, (200,200,200), opt_rect)
+                if opt_rect.collidepoint(pygame.mouse.get_pos()):
+                    pygame.draw.rect(surface, (180,180,180), opt_rect)
+                opt_surf = font.render(str(opt), True, (0,0,0))
+                surface.blit(opt_surf, opt_surf.get_rect(center=opt_rect.center))
+
+
+def format_si(value, unit, decimals=2):
     if value == 0:
-        return f"0.00 {unit}"
+        return f"0 {unit}"
     
     abs_val = abs(value)
     sign = "-" if value < 0 else ""
+    fmt = f".{decimals}f"
     
-    if abs_val < 1e-9:
-        return f"{sign}{abs_val*1e12:.2f} p{unit}"
+    # Clamp pico-level to zero
+    if abs_val < 1e-12:
+        return f"0 {unit}"
+    elif abs_val < 1e-9:
+        return f"{sign}{abs_val*1e12:{fmt}} p{unit}"
     elif abs_val < 1e-6:
-        return f"{sign}{abs_val*1e9:.2f} n{unit}"
+        return f"{sign}{abs_val*1e9:{fmt}} n{unit}"
     elif abs_val < 1e-3:
-        return f"{sign}{abs_val*1e6:.2f} µ{unit}"
+        return f"{sign}{abs_val*1e6:{fmt}} µ{unit}"
     elif abs_val < .1:
-        return f"{sign}{abs_val*1e3:.2f} m{unit}"
+        return f"{sign}{abs_val*1e3:{fmt}} m{unit}"
     elif abs_val >= 1e9:
-        return f"{sign}{abs_val/1e9:.2f} G{unit}"
+        return f"{sign}{abs_val/1e9:{fmt}} G{unit}"
     elif abs_val >= 1e6:
-        return f"{sign}{abs_val/1e6:.2f} M{unit}"
+        return f"{sign}{abs_val/1e6:{fmt}} M{unit}"
     elif abs_val >= 1e3:
-        return f"{sign}{abs_val/1e3:.2f} k{unit}"
+        return f"{sign}{abs_val/1e3:{fmt}} k{unit}"
     else:
-        return f"{sign}{abs_val:.2f} {unit}"
+        return f"{sign}{abs_val:{fmt}} {unit}"
 
 
 class SidePanel:
-    def __init__(self, x, y, width, height):
+    def __init__(self, x, y, width, height, simulator):
         self.rect = pygame.Rect(x, y, width, height)
         self.component = None
         self.visible = False
+        self.simulator = simulator
         self.font = pygame.font.Font(None, 24)
         self.title_font = pygame.font.Font(None, 32)
         
@@ -315,73 +339,92 @@ class SidePanel:
 
         # Properties based on type
         if isinstance(self.component, Resistor):
+            dec = 0 if (self.simulator.current_tau and self.simulator.is_simulating and not self.simulator.sim_paused) else 2
             draw_text(f"Resistance: {format_si(self.component.resistance, chr(0x2126))}")
-            draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
-            draw_text(f"Current: {format_si(self.component.current, 'A')}")
+            if self.simulator.is_simulating or self.simulator.sim_paused:
+                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V', dec)}")
+                draw_text(f"Current: {format_si(self.component.current, 'A', dec)}")
+            
+        elif isinstance(self.component, Capacitor):
+            dec = 0 if (self.simulator.current_tau and self.simulator.is_simulating and not self.simulator.sim_paused) else 2
+            draw_text(f"Capacitance: {format_si(self.component.capacitance, 'F')}")
+            if self.simulator.is_simulating or self.simulator.sim_paused:
+                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V', dec)}")
+                draw_text(f"Current: {format_si(self.component.current, 'A', dec)}")
+                charge = self.component.capacitance * self.component.voltage_drop
+                draw_text(f"Charge: {format_si(charge, 'C', dec)}")
+                tau = self.simulator.current_tau
+                if tau:
+                    draw_text(f"\u03c4: {format_si(tau, 's')}")
+                else:
+                    draw_text(f"\u03c4: Does not Exist")
             
         elif isinstance(self.component, Battery):
             draw_text(f"Voltage: {format_si(self.component.voltage, 'V')}")
-            draw_text(f"Current: {format_si(abs(self.component.current), 'A')}")
+            if self.simulator.is_simulating or self.simulator.sim_paused:
+                draw_text(f"Current: {format_si(abs(self.component.current), 'A')}")
             
         elif isinstance(self.component, LED):
             c_map_rev = {v: k for k, v in {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
                      "yellow": (255, 255, 0), "white": (255, 255, 255)}.items()}
             # self.component.color is a string name
             draw_text(f"Color: {self.component.color}")
-            draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
-            draw_text(f"Current: {format_si(self.component.current, 'A')}")
-            
-            # Brightness 
-            b_val = getattr(self.component, 'brightness', 0)
-            draw_text(f"Brightness: {b_val:.1f}%")
-            
-            # Draw a purity bar for brightness
-            bar_rect = pygame.Rect(self.rect.x + 20, self.rect.y + y_offset, self.rect.width - 40, 10)
-            pygame.draw.rect(surface, (50, 50, 50), bar_rect)
-            fill_width = (b_val / 100.0) * (self.rect.width - 40)
-            
-            # Use LED color for the bar
-            c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
-                     "yellow": (255, 255, 0), "white": (255, 255, 255)}
-            bar_color = c_map.get(self.component.color, (255, 255, 255))
-            
-            if fill_width > 0:
-                pygame.draw.rect(surface, bar_color, (bar_rect.x, bar_rect.y, fill_width, 10))
-            y_offset += 20
+            if self.simulator.is_simulating or self.simulator.sim_paused:
+                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
+                draw_text(f"Current: {format_si(self.component.current, 'A')}")
+                
+                # Brightness 
+                b_val = getattr(self.component, 'brightness', 0)
+                draw_text(f"Brightness: {b_val:.1f}%")
+                
+                # Draw a purity bar for brightness
+                bar_rect = pygame.Rect(self.rect.x + 20, self.rect.y + y_offset, self.rect.width - 40, 10)
+                pygame.draw.rect(surface, (50, 50, 50), bar_rect)
+                fill_width = (b_val / 100.0) * (self.rect.width - 40)
+                
+                # Use LED color for the bar
+                c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
+                         "yellow": (255, 255, 0), "white": (255, 255, 255)}
+                bar_color = c_map.get(self.component.color, (255, 255, 255))
+                
+                if fill_width > 0:
+                    pygame.draw.rect(surface, bar_color, (bar_rect.x, bar_rect.y, fill_width, 10))
+                y_offset += 20
             
         elif isinstance(self.component, Wire):
-            draw_text("Connected Current:")
-            
-            connected_comps = getattr(self.component, 'connected_components', [])
-            # Filter out batteries
-            non_batteries = [c for c in connected_comps if not isinstance(c, Battery)]
-            
-            target_comp = None
-            if len(non_batteries) == 1:
-                target_comp = non_batteries[0]
-            elif len(non_batteries) > 1:
-                # Prefer component at node1
-                # component nodes are tuples (r, c)
-                w_start = self.component.node1
+            if self.simulator.is_simulating or self.simulator.sim_paused:
+                draw_text("Connected Current:")
                 
-                # Check if any component shares this exact start node
-                start_matches = [c for c in non_batteries if c.node1 == w_start or c.node2 == w_start]
+                connected_comps = getattr(self.component, 'connected_components', [])
+                # Filter out batteries
+                non_batteries = [c for c in connected_comps if not isinstance(c, Battery)]
                 
-                if start_matches:
-                    target_comp = start_matches[0]
-                else:
-                    # Just take the first one
+                target_comp = None
+                if len(non_batteries) == 1:
                     target_comp = non_batteries[0]
-            
-            if target_comp:
-                val = getattr(target_comp, 'current', 0)
-                draw_text(f"{target_comp.name}: {format_si(val, 'A')}")
-            else:
-                draw_text("N/A", (100, 100, 100))
+                elif len(non_batteries) > 1:
+                    # Prefer component at node1
+                    # component nodes are tuples (r, c)
+                    w_start = self.component.node1
+                    
+                    # Check if any component shares this exact start node
+                    start_matches = [c for c in non_batteries if c.node1 == w_start or c.node2 == w_start]
+                    
+                    if start_matches:
+                        target_comp = start_matches[0]
+                    else:
+                        # Just take the first one
+                        target_comp = non_batteries[0]
                 
-            y_offset += 10
+                if target_comp:
+                    val = getattr(target_comp, 'current', 0)
+                    draw_text(f"{target_comp.name}: {format_si(val, 'A')}")
+                else:
+                    draw_text("N/A", (100, 100, 100))
+                    
+                y_offset += 10
             draw_text("Connections:", (0,0,0))
-            for comp in connected_comps:
+            for comp in getattr(self.component, 'connected_components', []):
                  draw_text(f"- {comp.name}", (100, 100, 100))
         
         # Connection Nodes info (Debug mostly, but useful)
@@ -413,13 +456,22 @@ class BreadboardSimulator:
         self.mergers = []
         self.param_widget = None
         self.selected_component = None
+        self.is_simulating = False
+        self.param_unit_widget = None
+
+        # Simulation state
+        self.sim_time = 0.0
+        self.current_tau = None
+        self.current_dt = 1/60.0
+        self.sim_paused = False
+        self.sim_time_widget = None
 
         # Create UI
         self.create_buttons()
         self.create_holes()
         self.load_assets()
         
-        self.side_panel = SidePanel(920, 150, 260, 450)
+        self.side_panel = SidePanel(920, 150, 260, 450, self)
         
         # Measurements
         self.measurements = {
@@ -433,6 +485,7 @@ class BreadboardSimulator:
         self.component_defaults = {
             "Battery": 9.0,
             "Resistor": 330,
+            "Capacitor": 10e-6,
             "LED": "red"
         }
     def load_assets(self):
@@ -440,12 +493,14 @@ class BreadboardSimulator:
             self.component_images = {
                 "Battery": pygame.image.load(r"assets\Battery.png"),
                 "Resistor": pygame.image.load(r"assets\Resistor.png"),
+                "Capacitor": pygame.image.load(r"assets\Capacitor.png"),
                 "LED": pygame.image.load(r"assets\LED.png")
             }
         except FileNotFoundError:
             self.component_images = {
                 "Battery": pygame.image.load(r"CircuitSim\assets\Battery.png"),
                 "Resistor": pygame.image.load(r"CircuitSim\assets\Resistor.png"),
+                "Capacitor": pygame.image.load(r"CircuitSim\assets\Capacitor.png"),
                 "LED": pygame.image.load(r"CircuitSim\assets\LED.png")
             }
     def get_hole_pos(self, row, col):
@@ -681,6 +736,14 @@ class BreadboardSimulator:
             pygame.draw.rect(surf, (255, 0, 0), (10, 0, 5, 20))
             pygame.draw.rect(surf, (0, 255, 0), (20, 0, 5, 20))
 
+        elif component.name == "Capacitor":
+            color = (200, 200, 200)
+            label = f"{format_si(component.capacitance, 'F')}"
+            pygame.draw.line(surf, (150, 150, 150), (0, 10), (length//2 - 5, 10), 2)
+            pygame.draw.line(surf, (150, 150, 150), (length//2 + 5, 10), (length, 10), 2)
+            pygame.draw.line(surf, (0, 0, 0), (length//2 - 5, 2), (length//2 - 5, 18), 3)
+            pygame.draw.line(surf, (0, 0, 0), (length//2 + 5, 2), (length//2 + 5, 18), 3)
+
         elif component.name == "LED":
             c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
                      "yellow": (255, 255, 0), "white": (255, 255, 255)}
@@ -700,26 +763,32 @@ class BreadboardSimulator:
     def create_buttons(self):
         # Component buttons
         self.buttons = []
-        componentsList = [Wire, Battery, Resistor, LED]
-        component_text = ["Wire", "Battery", "Resistor", "LED"]
+        componentsList = [Wire, Battery, Resistor, Capacitor, LED]
+        component_text = ["Wire", "Battery", "Resistor", "Capacitor", "LED"]
         for i, comp in enumerate(component_text):
-            btn = Button(50 + i * 130, 30, 120, 45, comp, componentsList[i])
+            btn = Button(50 + i * 115, 30, 105, 45, comp, componentsList[i])
             if comp == self.active_component_txt:
                 btn.selected = True
             self.buttons.append(btn)
-        self.run_button = Button(570, 30, 120, 45, "Run", None)
+        self.run_button = Button(650, 30, 120, 45, "Run", None)
+        self.sim_time_widget = NumericCounter(950, 30, 100, 45, label="Time(s)", value=0.0, step=1.0, min_val=0.0, max_val=1e6)
     def open_param_widget_for(self, btn):
         anchor_x = btn.rect.x
         anchor_y = btn.rect.bottom + 6
         self.param_button_rect = btn.rect
+        self.param_unit_widget = None
 
         if btn.text == "Battery":
             # Create numeric counter for voltage
             default_val = self.component_defaults.get("Battery", 9.0)
             widget = NumericCounter(anchor_x + 80, anchor_y, 80, 30,
-                                    label="Voltage", value=default_val, step=1, min_val=1, max_val=100000000)
+                                    label="Voltage", value=default_val, step=1, min_val=1e-6, max_val=100000000)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
+            
+            unit_opts = ["V", "mV", "kV"]
+            self.param_unit_widget = UnitDropdown(anchor_x + 80 + 80 + 40, anchor_y, 50, 30, unit_opts, "V")
+            
             self.param_for = "Battery"
             # Create instance with current value
             self.active_component = Battery(0, 0, None, None, widget.value)
@@ -728,11 +797,28 @@ class BreadboardSimulator:
             # Create numeric counter for resistance
             default_val = self.component_defaults.get("Resistor", 330)
             widget = NumericCounter(anchor_x + 80, anchor_y, 100, 30,
-                                    label="Resistance", value=default_val, step=10, min_val=1, max_val=100000)
+                                    label="Resistance", value=default_val, step=10, min_val=1e-3, max_val=1e9)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
+            
+            unit_opts = ["Ω", "mΩ", "kΩ", "MΩ"]
+            self.param_unit_widget = UnitDropdown(anchor_x + 80 + 100 + 40, anchor_y, 50, 30, unit_opts, "Ω")
+            
             self.param_for = "Resistor"
             self.active_component = Resistor(0, 0, None, None, widget.value, 0.0)
+
+        elif btn.text == "Capacitor":
+            default_val = self.component_defaults.get("Capacitor", 10)
+            widget = NumericCounter(anchor_x + 100, anchor_y, 100, 30,
+                                    label="Capacitance", value=default_val, step=1, min_val=1e-12, max_val=10000)
+            widget.set_position(anchor_x + 100, anchor_y)
+            self.param_widget = widget
+            
+            unit_opts = ["F", "mF", "µF", "nF", "pF"]
+            self.param_unit_widget = UnitDropdown(anchor_x + 100 + 100 + 40, anchor_y, 50, 30, unit_opts, "µF")
+            
+            self.param_for = "Capacitor"
+            self.active_component = Capacitor(0, 0, None, None, widget.value * 1e-6, 0.0)
 
         elif btn.text == "LED":
             # Create dropdown for LED color
@@ -858,6 +944,8 @@ class BreadboardSimulator:
         for btn in self.buttons:
             btn.draw(self.screen, self.font)
         self.run_button.draw(self.screen, self.font)
+        if self.sim_time_widget:
+            self.sim_time_widget.draw(self.screen, self.font)
         
         # Draw Side Panel
         if self.side_panel.visible:
@@ -887,8 +975,16 @@ class BreadboardSimulator:
         if self.param_widget:
             # Check for outside click logic
             bounds = self.param_widget.bounds()
+            if self.param_unit_widget:
+                bounds.union_ip(self.param_unit_widget.bounds())
+                
             clicked_outside = not bounds.collidepoint(pos)
 
+            if self.param_unit_widget:
+                unit_val = self.param_unit_widget.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos))
+                if unit_val is not None:
+                     self.update_active_component_param(self.param_widget.value)
+                     
             val = self.param_widget.handle_event(pygame.event.Event(pygame.MOUSEBUTTONDOWN, pos=pos))
             if val is not None:
                 self.update_active_component_param(val)
@@ -899,7 +995,10 @@ class BreadboardSimulator:
             if clicked_outside:
                 if isinstance(self.param_widget, Dropdown):
                     self.param_widget.expanded = False
+                if self.param_unit_widget:
+                    self.param_unit_widget.expanded = False
                 self.param_widget = None
+                self.param_unit_widget = None
                 self.param_for = None
 
 
@@ -920,20 +1019,29 @@ class BreadboardSimulator:
                 return
 
         if self.run_button.rect.collidepoint(pos):
-            print("Running simulation...")
-            print("Current components: " + ", ".join(c.name + " [Node " + str(c.node_id_1) + " -> " + str(c.node_id_2) + "]" for c in self.components))
-            active_nodes = list(set([c.node_id_1 for c in self.components] + [c.node_id_2 for c in self.components]))
-            print("Active nodes: " + ", ".join(str(n) for n in active_nodes))
-            matrix = generate_incidence_matrix(self.components, active_nodes)
-            print("Incidence Matrix:")
-            for row in matrix:
-                print(row)
-            print("Modified Nodal Analysis:")
-            voltages, currents = ModifiedNodalAnalysis(matrix, self.components, active_nodes)
-            print("Voltages:", voltages)
-            print("Voltages:", ", ".join(component.name + " - " + str(component.voltage_drop) + "V" for component in self.components if component.name != "Battery"))
-            print("Currents:", currents)
+            self.is_simulating = not self.is_simulating
+            self.run_button.text = "Stop" if self.is_simulating else "Run"
+            if not self.is_simulating:
+                self.sim_time = 0.0
+                self.sim_paused = False
+                if self.sim_time_widget:
+                    self.sim_time_widget.value = 0.0
+                for c in self.components:
+                    if isinstance(c, Capacitor):
+                        c.voltage_drop = 0.0
+                        c._prev_voltage_drop = 0.0
+                        c.current = 0.0
+                    elif isinstance(c, Resistor) or isinstance(c, LED):
+                        c.voltage_drop = 0.0
+                        c.current = 0.0
+                    elif isinstance(c, Battery):
+                        c.current = 0.0
+            print(f"{'Started' if self.is_simulating else 'Stopped'} simulation.")
             return
+            
+        if self.is_simulating and self.sim_time_widget:
+            if self.sim_time_widget.bounds().collidepoint(pos):
+                return
         
         # Check holes for placement
         for hole in self.holes:
@@ -988,6 +1096,8 @@ class BreadboardSimulator:
                         self.active_component = Battery(0, 0, None, None, self.active_component.voltage)
                     elif isinstance(self.active_component, Resistor):
                         self.active_component = Resistor(0, 0, None, None, self.active_component.resistance, 0.0)
+                    elif isinstance(self.active_component, Capacitor):
+                        self.active_component = Capacitor(0, 0, None, None, self.active_component.capacitance, 0.0)
                     elif isinstance(self.active_component, LED):
                         self.active_component = LED(0, 0, None, None, 220, 0.0, self.active_component.color)
                         
@@ -998,15 +1108,64 @@ class BreadboardSimulator:
                     self.first_hole = None
                 return 
     def update_active_component_param(self, value):
+        multiplier = 1.0
+        if self.param_unit_widget:
+             u = self.param_unit_widget.selected_option
+             if u in ["kV", "kΩ"]: multiplier = 1e3
+             elif u in ["MΩ"]: multiplier = 1e6
+             elif u in ["mV", "mΩ", "mF"]: multiplier = 1e-3
+             elif u in ["µF"]: multiplier = 1e-6
+             elif u in ["nF"]: multiplier = 1e-9
+             elif u in ["pF"]: multiplier = 1e-12
+             
+        actual_val = value * multiplier
+        
         if self.active_component_txt == "Battery":
-             self.active_component = Battery(0, 0, None, None, value)
+             self.active_component = Battery(0, 0, None, None, actual_val)
              self.component_defaults["Battery"] = value
         elif self.active_component_txt == "Resistor":
-             self.active_component = Resistor(0, 0, None, None, value, 0.0)
+             self.active_component = Resistor(0, 0, None, None, actual_val, 0.0)
              self.component_defaults["Resistor"] = value
+        elif self.active_component_txt == "Capacitor":
+             self.active_component = Capacitor(0, 0, None, None, actual_val, 0.0)
+             self.component_defaults["Capacitor"] = value
         elif self.active_component_txt == "LED":
              self.active_component = LED(0, 0, None, None, 220, 0.0, value)
              self.component_defaults["LED"] = value
+
+    def jump_to_time(self, target_time):
+        self.sim_paused = True
+        self.sim_time = target_time
+        if self.sim_time_widget:
+            self.sim_time_widget.value = target_time
+        
+        # Reset back to 0
+        for c in self.components:
+            if isinstance(c, Capacitor):
+                c.voltage_drop = 0.0
+                c._prev_voltage_drop = 0.0
+                c.current = 0.0
+            elif isinstance(c, Resistor) or isinstance(c, LED):
+                c.voltage_drop = 0.0
+                c.current = 0.0
+            elif isinstance(c, Battery):
+                c.current = 0.0
+                
+        if len(self.components) == 0:
+            return
+            
+        active_nodes = list(set([c.node_id_1 for c in self.components] + [c.node_id_2 for c in self.components]))
+        tau = calculate_time_constant(self.components)
+        self.current_tau = tau
+        dt = tau / 60.0 if tau else 1/60.0
+        self.current_dt = dt
+        
+        steps = int(target_time / dt) if dt > 0 else 0
+        matrix = generate_incidence_matrix(self.components, active_nodes)
+        
+        # Simulate forward
+        for _ in range(steps):
+             ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=dt)
 
     def run(self):
         # Main loop
@@ -1015,7 +1174,20 @@ class BreadboardSimulator:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.MOUSEBUTTONDOWN:
+                
+                handled_by_time_widget = False
+                if self.is_simulating and self.sim_time_widget:
+                    val = self.sim_time_widget.handle_event(event)
+                    if val is not None:
+                        self.jump_to_time(val)
+                        handled_by_time_widget = True
+                    if event.type == pygame.MOUSEBUTTONDOWN and hasattr(self.sim_time_widget, 'bounds') and self.sim_time_widget.bounds().collidepoint(event.pos):
+                        handled_by_time_widget = True
+                        
+                if handled_by_time_widget:
+                    continue
+                    
+                if event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos, event.button)
                 elif event.type == pygame.KEYDOWN:
                     if self.param_widget:
@@ -1030,17 +1202,24 @@ class BreadboardSimulator:
                         if hole.contains(event.pos):
                             self.hovered_hole = hole
                             break
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if self.param_widget:
-                        value = self.param_widget.handle_event(event)
-                        if value is not None:
-                            if self.active_component_txt == "Battery":
-                                self.active_component = Battery(0, 0, value)
-                            elif self.active_component_txt == "Resistor":
-                                self.active_component = Resistor(0, 0, value, 0.0)
-                            elif self.active_component_txt == "LED":
-                                self.active_component = LED(0, 0, 220, 0.0, value)
-                    self.handle_click(event.pos, event.button)
+                    
+            if self.is_simulating:
+                if self.sim_time_widget:
+                    self.sim_time_widget.value = self.sim_time
+                if not self.sim_paused and len(self.components) > 0:
+                    active_nodes = list(set([c.node_id_1 for c in self.components] + [c.node_id_2 for c in self.components]))
+                    try:
+                        matrix = generate_incidence_matrix(self.components, active_nodes)
+                        tau = calculate_time_constant(self.components)
+                        self.current_tau = tau
+                        dt = tau / 60.0 if tau else 1/60.0
+                        self.current_dt = dt
+                        ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=dt)
+                        self.sim_time += dt
+                    except Exception as e:
+                        print(f"Simulation error: {e}")
+                        self.is_simulating = False
+                        self.run_button.text = "Run"
             
             self.screen.fill(BG_COLOR)
             
@@ -1048,6 +1227,8 @@ class BreadboardSimulator:
             self.draw_breadboard()
             if self.param_widget:
                 self.param_widget.draw(self.screen, self.font)
+            if self.param_unit_widget:
+                self.param_unit_widget.draw(self.screen, self.font)
 
             pygame.display.flip()
             self.clock.tick(60)

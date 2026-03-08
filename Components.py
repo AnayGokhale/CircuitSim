@@ -1,5 +1,5 @@
 '''
-Included components: Wire, Battery, Resistor, LED
+Included components: Wire, Battery, Resistor, Capacitor, LED
 '''
 class Wire:
     def __init__(self, node1, node2, name="Wire"):
@@ -54,6 +54,19 @@ class Resistor:
         if zeros > 9: zeros = 9
         
         return [colors[d1], colors[d2], colors[zeros], "gold"]
+
+class Capacitor:
+    def __init__(self, node1, node2, node_id_1, node_id_2, capacitance, voltage_drop, name="Capacitor"):
+        self.node1 = node1
+        self.node2 = node2
+        self.node_id_1 = node_id_1
+        self.node_id_2 = node_id_2
+        self.capacitance = capacitance
+        self.voltage_drop = voltage_drop
+        self.name = name
+        self.current = 0.0
+        self._prev_voltage_drop = 0.0
+
 class LED:
     def __init__(self, node1, node2, node_id_1, node_id_2, resistance, voltage_drop, color, name="LED"):
         self.node1 = node1
