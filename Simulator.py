@@ -85,11 +85,12 @@ class Hole:
 
 class Button:
 # UI Button for component selection 
-    def __init__(self, x, y, width, height, text, type):
+    def __init__(self, x, y, width, height, text, type, symbol=None):
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
         self.type = type
         self.selected = False
+        self.symbol = symbol
         
     def draw(self, surface, font):
         color = BUTTON_SELECTED if self.selected else BUTTON_COLOR
@@ -97,9 +98,54 @@ class Button:
             color = BUTTON_HOVER
             
         pygame.draw.rect(surface, color, self.rect, border_radius=5)
-        text_surf = font.render(self.text, True, (255, 255, 255))
-        text_rect = text_surf.get_rect(center=self.rect.center)
-        surface.blit(text_surf, text_rect)
+        
+        if self.symbol:
+            self.draw_symbol(surface, font)
+        else:
+            text_surf = font.render(self.text, True, (255, 255, 255))
+            text_rect = text_surf.get_rect(center=self.rect.center)
+            surface.blit(text_surf, text_rect)
+
+    def draw_symbol(self, surface, font):
+        cx, cy = self.rect.center
+        white = (255, 255, 255)
+        
+        if self.symbol == 'play':
+            size = 10
+            points = [(cx - size//2 + 2, cy - size + 2), (cx - size//2 + 2, cy + size - 2), (cx + size - 2, cy)]
+            pygame.draw.polygon(surface, white, points)
+            
+        elif self.symbol == 'pause':
+            w, h = 4, 14
+            gap = 6
+            pygame.draw.rect(surface, white, (cx - gap//2 - w, cy - h//2, w, h))
+            pygame.draw.rect(surface, white, (cx + gap//2, cy - h//2, w, h))
+            
+        elif self.symbol == 'back10':
+            size = 8
+            p1 = [(cx - 2, cy - size), (cx - 2, cy + size), (cx - 10, cy)]
+            p2 = [(cx + 6, cy - size), (cx + 6, cy + size), (cx - 2, cy)]
+            pygame.draw.polygon(surface, white, p1)
+            pygame.draw.polygon(surface, white, p2)
+            
+            small_font = pygame.font.Font(None, 18)
+            t_surf = small_font.render("10", True, white)
+            surface.blit(t_surf, (cx - 7, cy + 5))
+            
+        elif self.symbol == 'fwd10':
+            size = 8
+            p1 = [(cx - 10, cy - size), (cx - 10, cy + size), (cx - 2, cy)]
+            p2 = [(cx - 2, cy - size), (cx - 2, cy + size), (cx + 6, cy)]
+            pygame.draw.polygon(surface, white, p1)
+            pygame.draw.polygon(surface, white, p2)
+            
+            small_font = pygame.font.Font(None, 18)
+            t_surf = small_font.render("10", True, white)
+            surface.blit(t_surf, (cx - 3, cy + 5))
+            
+        elif self.symbol == 'reset':
+            size = 12
+            pygame.draw.rect(surface, white, (cx - size//2, cy - size//2, size, size))
 
 class NumericCounter:
     def __init__(self, x, y, width, height, label, value=0.0, step=1.0, min_val=0.0, max_val=1000.0):
@@ -128,16 +174,17 @@ class NumericCounter:
 
     def bounds(self):
         # Return a rect that covers label + minus + value + plus, for outside-click detection
-        left = self.minus_rect.x
+        left = self.minus_rect.x - 150
         top = self.rect.y
         right = self.plus_rect.right
         bottom = self.rect.bottom
-        return pygame.Rect(left - 100, top, (right - left) + 100, bottom - top)
+        return pygame.Rect(left, top, right - left, bottom - top)
 
     def draw(self, surface, font):
         label_surf = font.render(self.label, True, (0,0,0))
         label_y = self.rect.centery - label_surf.get_height() // 2
-        surface.blit(label_surf, (self.rect.x - 90 - label_surf.get_width()//2, label_y))
+        label_x = self.minus_rect.left - 15 - label_surf.get_width()
+        surface.blit(label_surf, (label_x, label_y))
 
         bg_color = (255, 255, 255) if self.active else (230, 230, 230)
         pygame.draw.rect(surface, bg_color, self.rect, border_radius=4)
@@ -226,8 +273,14 @@ class Dropdown:
 
         # Main box
         pygame.draw.rect(surface, (230,230,230), self.rect, border_radius=4)
+        pygame.draw.rect(surface, (100,100,100), self.rect, 2, border_radius=4)
         text_surf = font.render(str(self.selected_option), True, (0,0,0))
         surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
+        
+        # Dropdown arrow
+        chev_x = self.rect.right - 12
+        chev_y = self.rect.centery
+        pygame.draw.polygon(surface, (100,100,100), [(chev_x - 4, chev_y - 2), (chev_x + 4, chev_y - 2), (chev_x, chev_y + 3)])
 
         # Expanded options below the button-aligned box
         if self.expanded:
@@ -273,33 +326,33 @@ class UnitDropdown(Dropdown):
                 surface.blit(opt_surf, opt_surf.get_rect(center=opt_rect.center))
 
 
+def _fmt2(val):
+    return f"{val:.2f}".rstrip('0').rstrip('.')
+
 def format_si(value, unit, decimals=2):
     if value == 0:
         return f"0 {unit}"
     
     abs_val = abs(value)
     sign = "-" if value < 0 else ""
-    fmt = f".{decimals}f"
     
-    # Clamp pico-level to zero
-    if abs_val < 1e-12:
+    # Clamp pico-level (and any smaller noise) to zero
+    if abs_val < 1e-9:
         return f"0 {unit}"
-    elif abs_val < 1e-9:
-        return f"{sign}{abs_val*1e12:{fmt}} p{unit}"
     elif abs_val < 1e-6:
-        return f"{sign}{abs_val*1e9:{fmt}} n{unit}"
+        return f"{sign}{_fmt2(abs_val*1e9)} n{unit}"
     elif abs_val < 1e-3:
-        return f"{sign}{abs_val*1e6:{fmt}} µ{unit}"
+        return f"{sign}{_fmt2(abs_val*1e6)} µ{unit}"
     elif abs_val < .1:
-        return f"{sign}{abs_val*1e3:{fmt}} m{unit}"
+        return f"{sign}{_fmt2(abs_val*1e3)} m{unit}"
     elif abs_val >= 1e9:
-        return f"{sign}{abs_val/1e9:{fmt}} G{unit}"
+        return f"{sign}{_fmt2(abs_val/1e9)} G{unit}"
     elif abs_val >= 1e6:
-        return f"{sign}{abs_val/1e6:{fmt}} M{unit}"
+        return f"{sign}{_fmt2(abs_val/1e6)} M{unit}"
     elif abs_val >= 1e3:
-        return f"{sign}{abs_val/1e3:{fmt}} k{unit}"
+        return f"{sign}{_fmt2(abs_val/1e3)} k{unit}"
     else:
-        return f"{sign}{abs_val:{fmt}} {unit}"
+        return f"{sign}{_fmt2(abs_val)} {unit}"
 
 
 class SidePanel:
@@ -339,20 +392,18 @@ class SidePanel:
 
         # Properties based on type
         if isinstance(self.component, Resistor):
-            dec = 0 if (self.simulator.current_tau and self.simulator.is_simulating and not self.simulator.sim_paused) else 2
             draw_text(f"Resistance: {format_si(self.component.resistance, chr(0x2126))}")
             if self.simulator.is_simulating or self.simulator.sim_paused:
-                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V', dec)}")
-                draw_text(f"Current: {format_si(self.component.current, 'A', dec)}")
+                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
+                draw_text(f"Current: {format_si(self.component.current, 'A')}")
             
         elif isinstance(self.component, Capacitor):
-            dec = 0 if (self.simulator.current_tau and self.simulator.is_simulating and not self.simulator.sim_paused) else 2
             draw_text(f"Capacitance: {format_si(self.component.capacitance, 'F')}")
             if self.simulator.is_simulating or self.simulator.sim_paused:
-                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V', dec)}")
-                draw_text(f"Current: {format_si(self.component.current, 'A', dec)}")
+                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
+                draw_text(f"Current: {format_si(self.component.current, 'A')}")
                 charge = self.component.capacitance * self.component.voltage_drop
-                draw_text(f"Charge: {format_si(charge, 'C', dec)}")
+                draw_text(f"Charge: {format_si(charge, 'C')}")
                 tau = self.simulator.current_tau
                 if tau:
                     draw_text(f"\u03c4: {format_si(tau, 's')}")
@@ -435,7 +486,8 @@ class BreadboardSimulator:
 # Main application class
     def __init__(self):
         # Pygame setup
-        self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
+        self.window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.RESIZABLE)
+        self.screen = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Breadboard Simulator")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 28)
@@ -483,10 +535,10 @@ class BreadboardSimulator:
         
         # Persistent defaults
         self.component_defaults = {
-            "Battery": 9.0,
-            "Resistor": 330,
-            "Capacitor": 10e-6,
-            "LED": "red"
+            "Battery":   {"val": 9.0, "unit": "V"},
+            "Resistor":  {"val": 330, "unit": "Ω"},
+            "Capacitor": {"val": 10.0, "unit": "µF"},
+            "LED":       "red"
         }
     def load_assets(self):
         try:
@@ -563,6 +615,8 @@ class BreadboardSimulator:
             self.mergers.remove(comp)
             
         self.selected_component = None
+        self.side_panel.visible = False
+        self.side_panel.component = None
         
         # Rebuild circuit connectivity
         self.rebuild_circuit()
@@ -770,55 +824,56 @@ class BreadboardSimulator:
             if comp == self.active_component_txt:
                 btn.selected = True
             self.buttons.append(btn)
-        self.run_button = Button(650, 30, 120, 45, "Run", None)
-        self.sim_time_widget = NumericCounter(950, 30, 100, 45, label="Time(s)", value=0.0, step=1.0, min_val=0.0, max_val=1e6)
+        self.run_button = Button(650, 30, 80, 45, "Run", None)
+        
+        self.sim_back_button =  Button(650, 35, 40, 35, "", None, symbol='back10')
+        self.sim_pause_button = Button(695, 35, 40, 35, "", None, symbol='pause')
+        self.sim_fwd_button =   Button(740, 35, 40, 35, "", None, symbol='fwd10')
+        self.sim_reset_button = Button(785, 35, 40, 35, "", None, symbol='reset')
+            
+        self.sim_time_widget = NumericCounter(980, 30, 80, 45, label="Time(s)", value=0.0, step=1.0, min_val=0.0, max_val=1e6)
+    
     def open_param_widget_for(self, btn):
         anchor_x = btn.rect.x
         anchor_y = btn.rect.bottom + 6
         self.param_button_rect = btn.rect
-        self.param_unit_widget = None
-
+        self.param_unit_widget = None        
         if btn.text == "Battery":
             # Create numeric counter for voltage
-            default_val = self.component_defaults.get("Battery", 9.0)
-            widget = NumericCounter(anchor_x + 80, anchor_y, 80, 30,
-                                    label="Voltage", value=default_val, step=1, min_val=1e-6, max_val=100000000)
-            widget.set_position(anchor_x + 80, anchor_y)
+            default = self.component_defaults.get("Battery", {"val": 9.0, "unit": "V"})
+            widget = NumericCounter(anchor_x + 90, anchor_y, 60, 30,
+                                    label="Voltage", value=default["val"], step=1, min_val=1e-6, max_val=100000000)
+            widget.set_position(anchor_x + 90, anchor_y)
             self.param_widget = widget
             
             unit_opts = ["V", "mV", "kV"]
-            self.param_unit_widget = UnitDropdown(anchor_x + 80 + 80 + 40, anchor_y, 50, 30, unit_opts, "V")
+            self.param_unit_widget = UnitDropdown(anchor_x + 90 + 60 + 40, anchor_y, 50, 30, unit_opts, default["unit"])
             
             self.param_for = "Battery"
-            # Create instance with current value
-            self.active_component = Battery(0, 0, None, None, widget.value)
-
         elif btn.text == "Resistor":
             # Create numeric counter for resistance
-            default_val = self.component_defaults.get("Resistor", 330)
-            widget = NumericCounter(anchor_x + 80, anchor_y, 100, 30,
-                                    label="Resistance", value=default_val, step=10, min_val=1e-3, max_val=1e9)
-            widget.set_position(anchor_x + 80, anchor_y)
+            default = self.component_defaults.get("Resistor", {"val": 330, "unit": "Ω"})
+            widget = NumericCounter(anchor_x + 110, anchor_y, 60, 30,
+                                    label="Resistance", value=default["val"], step=10, min_val=1e-3, max_val=1e9)
+            widget.set_position(anchor_x + 110, anchor_y)
             self.param_widget = widget
             
             unit_opts = ["Ω", "mΩ", "kΩ", "MΩ"]
-            self.param_unit_widget = UnitDropdown(anchor_x + 80 + 100 + 40, anchor_y, 50, 30, unit_opts, "Ω")
+            self.param_unit_widget = UnitDropdown(anchor_x + 110 + 60 + 40, anchor_y, 50, 30, unit_opts, default["unit"])
             
             self.param_for = "Resistor"
-            self.active_component = Resistor(0, 0, None, None, widget.value, 0.0)
 
         elif btn.text == "Capacitor":
-            default_val = self.component_defaults.get("Capacitor", 10)
-            widget = NumericCounter(anchor_x + 100, anchor_y, 100, 30,
-                                    label="Capacitance", value=default_val, step=1, min_val=1e-12, max_val=10000)
-            widget.set_position(anchor_x + 100, anchor_y)
+            default = self.component_defaults.get("Capacitor", {"val": 10.0, "unit": "µF"})
+            widget = NumericCounter(anchor_x + 130, anchor_y, 60, 30,
+                                    label="Capacitance", value=default["val"], step=1, min_val=1e-12, max_val=10000)
+            widget.set_position(anchor_x + 130, anchor_y)
             self.param_widget = widget
             
             unit_opts = ["F", "mF", "µF", "nF", "pF"]
-            self.param_unit_widget = UnitDropdown(anchor_x + 100 + 100 + 40, anchor_y, 50, 30, unit_opts, "µF")
+            self.param_unit_widget = UnitDropdown(anchor_x + 130 + 60 + 40, anchor_y, 50, 30, unit_opts, default["unit"])
             
             self.param_for = "Capacitor"
-            self.active_component = Capacitor(0, 0, None, None, widget.value * 1e-6, 0.0)
 
         elif btn.text == "LED":
             # Create dropdown for LED color
@@ -828,10 +883,13 @@ class BreadboardSimulator:
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "LED"
-            self.active_component = LED(0, 0, None, None, 220, 0.0, widget.selected_option)  # default 220Ω
         else:
             self.param_widget = None
             self.param_for = None
+            
+        # Ensure active_component gets initialized right away based on the new defaults
+        if self.param_widget:
+            self.update_active_component_param(self.param_widget.value if not isinstance(self.param_widget, Dropdown) else self.param_widget.selected_option)
     def create_holes(self):
         self.holes = []
         
@@ -943,7 +1001,15 @@ class BreadboardSimulator:
         # Draw buttons
         for btn in self.buttons:
             btn.draw(self.screen, self.font)
-        self.run_button.draw(self.screen, self.font)
+            
+        if not self.is_simulating:
+            self.run_button.draw(self.screen, self.font)
+        else:
+            self.sim_back_button.draw(self.screen, self.font)
+            self.sim_pause_button.symbol = 'play' if self.sim_paused else 'pause'
+            self.sim_pause_button.draw(self.screen, self.font)
+            self.sim_fwd_button.draw(self.screen, self.font)
+            self.sim_reset_button.draw(self.screen, self.font)
         if self.sim_time_widget:
             self.sim_time_widget.draw(self.screen, self.font)
         
@@ -1018,14 +1084,20 @@ class BreadboardSimulator:
                     self.open_param_widget_for(btn)
                 return
 
-        if self.run_button.rect.collidepoint(pos):
-            self.is_simulating = not self.is_simulating
-            self.run_button.text = "Stop" if self.is_simulating else "Run"
-            if not self.is_simulating:
+        if not self.is_simulating:
+            if self.run_button.rect.collidepoint(pos):
+                self.is_simulating = True
+                self.sim_paused = False
+                print("Started simulation.")
+                return
+        else:
+            if self.sim_reset_button.rect.collidepoint(pos):
+                self.is_simulating = False
                 self.sim_time = 0.0
                 self.sim_paused = False
                 if self.sim_time_widget:
                     self.sim_time_widget.value = 0.0
+                    self.sim_time_widget.text = "0.0"
                 for c in self.components:
                     if isinstance(c, Capacitor):
                         c.voltage_drop = 0.0
@@ -1036,8 +1108,22 @@ class BreadboardSimulator:
                         c.current = 0.0
                     elif isinstance(c, Battery):
                         c.current = 0.0
-            print(f"{'Started' if self.is_simulating else 'Stopped'} simulation.")
-            return
+                print("Stopped simulation.")
+                return
+            
+            if self.sim_pause_button.rect.collidepoint(pos):
+                self.sim_paused = not self.sim_paused
+                return
+                
+            if self.sim_back_button.rect.collidepoint(pos):
+                new_time = max(0.0, self.sim_time - 10.0)
+                self.jump_to_time(new_time)
+                return
+                
+            if self.sim_fwd_button.rect.collidepoint(pos):
+                new_time = self.sim_time + 10.0
+                self.jump_to_time(new_time)
+                return
             
         if self.is_simulating and self.sim_time_widget:
             if self.sim_time_widget.bounds().collidepoint(pos):
@@ -1109,26 +1195,27 @@ class BreadboardSimulator:
                 return 
     def update_active_component_param(self, value):
         multiplier = 1.0
+        u = ""
         if self.param_unit_widget:
              u = self.param_unit_widget.selected_option
              if u in ["kV", "kΩ"]: multiplier = 1e3
              elif u in ["MΩ"]: multiplier = 1e6
              elif u in ["mV", "mΩ", "mF"]: multiplier = 1e-3
              elif u in ["µF"]: multiplier = 1e-6
-             elif u in ["nF"]: multiplier = 1e-9
-             elif u in ["pF"]: multiplier = 1e-12
-             
-        actual_val = value * multiplier
+        if self.active_component_txt == "LED":
+            actual_val = value # For LEDs, value is the color string
+        else:
+            actual_val = value * multiplier
         
         if self.active_component_txt == "Battery":
              self.active_component = Battery(0, 0, None, None, actual_val)
-             self.component_defaults["Battery"] = value
+             self.component_defaults["Battery"] = {"val": value, "unit": u}
         elif self.active_component_txt == "Resistor":
              self.active_component = Resistor(0, 0, None, None, actual_val, 0.0)
-             self.component_defaults["Resistor"] = value
+             self.component_defaults["Resistor"] = {"val": value, "unit": u}
         elif self.active_component_txt == "Capacitor":
              self.active_component = Capacitor(0, 0, None, None, actual_val, 0.0)
-             self.component_defaults["Capacitor"] = value
+             self.component_defaults["Capacitor"] = {"val": value, "unit": u}
         elif self.active_component_txt == "LED":
              self.active_component = LED(0, 0, None, None, 220, 0.0, value)
              self.component_defaults["LED"] = value
@@ -1162,6 +1249,12 @@ class BreadboardSimulator:
         
         dt_sim = dt_base / 100.0 if dt_base > 0 else 1/6000.0
         steps = int(target_time / dt_sim) if dt_sim > 0 else 0
+        
+        MAX_STEPS = 10000
+        if steps > MAX_STEPS:
+            dt_sim = target_time / MAX_STEPS
+            steps = MAX_STEPS
+            
         remainder = target_time - (steps * dt_sim)
         
         matrix = generate_incidence_matrix(self.components, active_nodes)
@@ -1174,6 +1267,12 @@ class BreadboardSimulator:
         if remainder > 1e-6:
              ModifiedNodalAnalysis(matrix, self.components, active_nodes, dt=remainder)
 
+    def get_internal_pos(self, pos):
+        win_w, win_h = self.window.get_size()
+        scale_x = WINDOW_WIDTH / win_w
+        scale_y = WINDOW_HEIGHT / win_h
+        return (int(pos[0] * scale_x), int(pos[1] * scale_y))
+
     def run(self):
         # Main loop
         running = True
@@ -1182,13 +1281,26 @@ class BreadboardSimulator:
                 if event.type == pygame.QUIT:
                     running = False
                 
+                if event.type == pygame.VIDEORESIZE:
+                    self.window = pygame.display.set_mode((event.w, event.h), pygame.RESIZABLE)
+                    continue
+
+                if hasattr(event, 'pos'):
+                    evt_dict = event.dict.copy()
+                    evt_dict['pos'] = self.get_internal_pos(event.pos)
+                    event = pygame.event.Event(event.type, evt_dict)
+
                 handled_by_time_widget = False
-                if self.is_simulating and self.sim_time_widget:
+                if self.sim_time_widget:
                     val = self.sim_time_widget.handle_event(event)
                     if val is not None:
+                        if not self.is_simulating:
+                            self.is_simulating = True
                         self.jump_to_time(val)
                         handled_by_time_widget = True
                     if event.type == pygame.MOUSEBUTTONDOWN and hasattr(self.sim_time_widget, 'bounds') and self.sim_time_widget.bounds().collidepoint(event.pos):
+                        handled_by_time_widget = True
+                    elif event.type == pygame.KEYDOWN and hasattr(self.sim_time_widget, 'active') and self.sim_time_widget.active:
                         handled_by_time_widget = True
                         
                 if handled_by_time_widget:
@@ -1197,11 +1309,15 @@ class BreadboardSimulator:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos, event.button)
                 elif event.type == pygame.KEYDOWN:
+                    widget_handled_key = False
                     if self.param_widget:
                         value = self.param_widget.handle_event(event)
                         if value is not None:
                             self.update_active_component_param(value)
-                    elif event.key == pygame.K_DELETE or event.key == pygame.K_BACKSPACE:
+                        if hasattr(self.param_widget, 'active') and self.param_widget.active:
+                            widget_handled_key = True
+                            
+                    if not widget_handled_key and (event.key == pygame.K_DELETE or event.key == pygame.K_BACKSPACE):
                         self.delete_selected_component()
                 elif event.type == pygame.MOUSEMOTION:
                     self.hovered_hole = None
@@ -1242,6 +1358,9 @@ class BreadboardSimulator:
             if self.param_unit_widget:
                 self.param_unit_widget.draw(self.screen, self.font)
 
+            # Scale and blit to window
+            scaled = pygame.transform.smoothscale(self.screen, self.window.get_size())
+            self.window.blit(scaled, (0, 0))
             pygame.display.flip()
             self.clock.tick(60)
         

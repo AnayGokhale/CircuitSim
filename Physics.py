@@ -23,52 +23,85 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                     else:
                         G[i][j] = 1e9  # Very high conductance for 0 resistance to avoid singular matrices
     
-    # Master Matrix
-    Master = np.block([
-        [load_matrix.T@G@load_matrix, source_matrix.T],
-        [source_matrix, np.atleast_2d(np.zeros((len(source_matrix), len(source_matrix))))]
-    ])
-
     # Infintely small conductance to avoid singular matrices
     GMIN = 1e-12
-    for i in range(len(active_nodes)):
-        Master[i][i] += GMIN
-
     # Z Vector
     Z = np.zeros(len(active_nodes) + len(sources))
-    
-    # Add historical current from capacitors
-    for i, component in enumerate(components):
-        if component.name == "Capacitor":
-            # Companion model: Ieq = (C / dt) * V_prev
-            # _prev_voltage_drop stores signed (v1 - v2), matching v_drop convention
-            # Incidence matrix has v_branch = v2 - v1 = -v_drop, so signs must flip
-            Ieq = (component.capacitance / dt) * component._prev_voltage_drop
-            if component.node_id_1 in active_nodes:
-                idx1 = active_nodes.index(component.node_id_1)
-                Z[idx1] += Ieq
-            if component.node_id_2 in active_nodes:
-                idx2 = active_nodes.index(component.node_id_2)
-                Z[idx2] -= Ieq
-
-    for i, source in enumerate(sources):
-        Z[i + len(active_nodes)] = source.voltage
         
-    if 0 in active_nodes:
-        gnd_idx = active_nodes.index(0)
+    if len(sources) == 0:
+        # Battery-less circuit Support (RC Discharge)
+        Master = load_matrix.T @ G @ load_matrix
+        for i in range(len(active_nodes)):
+            Master[i][i] += GMIN
+            
+        # Add historical current from capacitors
+        for i, component in enumerate(components):
+            if component.name == "Capacitor":
+                Ieq = (component.capacitance / dt) * component._prev_voltage_drop
+                if component.node_id_1 in active_nodes:
+                    idx1 = active_nodes.index(component.node_id_1)
+                    Z[idx1] += Ieq
+                if component.node_id_2 in active_nodes:
+                    idx2 = active_nodes.index(component.node_id_2)
+                    Z[idx2] -= Ieq
+        
+        gnd_idx = active_nodes.index(0) if 0 in active_nodes else 0
+        
+        M_reduced = np.delete(Master, gnd_idx, axis=0)
+        M_reduced = np.delete(M_reduced, gnd_idx, axis=1)
+        Z_reduced = np.delete(Z[:len(active_nodes)], gnd_idx)
+        
+        try:
+            voltages_reduced = np.linalg.solve(M_reduced, Z_reduced)
+        except np.linalg.LinAlgError:
+            voltages_reduced = np.zeros(len(active_nodes) - 1)
+            
+        full_voltages = np.insert(voltages_reduced, gnd_idx, 0.0)
+        battery_currents = []
+        
     else:
-        gnd_idx = 0
+        # Standard block matrix with Battery sources
+        Master = np.block([
+            [load_matrix.T@G@load_matrix, source_matrix.T],
+            [source_matrix, np.atleast_2d(np.zeros((len(source_matrix), len(source_matrix))))]
+        ])
+        
+        for i in range(len(active_nodes)):
+            Master[i][i] += GMIN
 
-    # Remove Ground Row and Column
-    M_reduced = np.delete(Master, gnd_idx, axis=0)
-    M_reduced = np.delete(M_reduced, gnd_idx, axis=1)
-    Z_reduced = np.delete(Z, gnd_idx)
+        # Add historical current from capacitors
+        for i, component in enumerate(components):
+            if component.name == "Capacitor":
+                Ieq = (component.capacitance / dt) * component._prev_voltage_drop
+                if component.node_id_1 in active_nodes:
+                    idx1 = active_nodes.index(component.node_id_1)
+                    Z[idx1] += Ieq
+                if component.node_id_2 in active_nodes:
+                    idx2 = active_nodes.index(component.node_id_2)
+                    Z[idx2] -= Ieq
 
-    # Solve for Voltages
-    x = np.linalg.solve(M_reduced, Z_reduced)
-    voltages_reduced = x[:len(active_nodes)-1]
-    full_voltages = np.insert(voltages_reduced, gnd_idx, 0.0)
-    battery_currents = x[len(active_nodes)-1:]
+        for i, source in enumerate(sources):
+            Z[i + len(active_nodes)] = source.voltage
+            
+        if 0 in active_nodes:
+            gnd_idx = active_nodes.index(0)
+        else:
+            gnd_idx = 0
+
+        # Remove Ground Row and Column
+        M_reduced = np.delete(Master, gnd_idx, axis=0)
+        M_reduced = np.delete(M_reduced, gnd_idx, axis=1)
+        Z_reduced = np.delete(Z, gnd_idx)
+
+        # Solve for Voltages
+        try:
+            x = np.linalg.solve(M_reduced, Z_reduced)
+        except np.linalg.LinAlgError:
+            x = np.zeros(len(M_reduced))
+            
+        voltages_reduced = x[:len(active_nodes)-1]
+        full_voltages = np.insert(voltages_reduced, gnd_idx, 0.0)
+        battery_currents = x[len(active_nodes)-1:]
     
     # Calculate voltage drops and currents
     voltage_dict = {}
@@ -165,7 +198,7 @@ def calculate_time_constant(components):
             Y[j][j] += g
             Y[i][j] -= g
             Y[j][i] -= g
-    
+            
     for bat in batteries:
         g = 1e9 
         i = all_nodes.index(bat.node_id_1)
@@ -174,23 +207,26 @@ def calculate_time_constant(components):
         Y[j][j] += g
         Y[i][j] -= g
         Y[j][i] -= g
-    
-    for i in range(n):
-        Y[i][i] += 1e-12
-    
+        
     taus = []
-    for cap in capacitors:
+
+    # Method 1: Check time constant with all other capacitors OPEN
+    for m, cap in enumerate(capacitors):
         ci = all_nodes.index(cap.node_id_1)
         cj = all_nodes.index(cap.node_id_2)
         if ci == cj:
             continue
-        
+            
+        Y_cap = np.copy(Y)
+        for i in range(n):
+            Y_cap[i][i] += 1e-12
+            
         I_vec = np.zeros(n)
         I_vec[ci] = 1.0
         I_vec[cj] = -1.0
         
         ref = 0
-        Y_red = np.delete(np.delete(Y, ref, axis=0), ref, axis=1)
+        Y_red = np.delete(np.delete(Y_cap, ref, axis=0), ref, axis=1)
         I_red = np.delete(I_vec, ref)
         
         try:
@@ -198,9 +234,48 @@ def calculate_time_constant(components):
             V_full = np.insert(V_red, ref, 0.0)
             R_th = abs(V_full[ci] - V_full[cj])
             tau = R_th * cap.capacitance
-            if tau > 0:
+            if tau > 0 and tau < 1e5:
                 taus.append(tau)
         except np.linalg.LinAlgError:
             pass
-    
+
+    # Method 2: Check time constant with all other capacitors SHORTED
+    for m, cap in enumerate(capacitors):
+        ci = all_nodes.index(cap.node_id_1)
+        cj = all_nodes.index(cap.node_id_2)
+        if ci == cj:
+            continue
+            
+        Y_cap = np.copy(Y)
+        for k, other_cap in enumerate(capacitors):
+            if k == m: continue
+            g = 1e9
+            oki = all_nodes.index(other_cap.node_id_1)
+            okj = all_nodes.index(other_cap.node_id_2)
+            Y_cap[oki][oki] += g
+            Y_cap[okj][okj] += g
+            Y_cap[oki][okj] -= g
+            Y_cap[okj][oki] -= g
+            
+        for i in range(n):
+            Y_cap[i][i] += 1e-12
+            
+        I_vec = np.zeros(n)
+        I_vec[ci] = 1.0
+        I_vec[cj] = -1.0
+        
+        ref = 0
+        Y_red = np.delete(np.delete(Y_cap, ref, axis=0), ref, axis=1)
+        I_red = np.delete(I_vec, ref)
+        
+        try:
+            V_red = np.linalg.solve(Y_red, I_red)
+            V_full = np.insert(V_red, ref, 0.0)
+            R_th = abs(V_full[ci] - V_full[cj])
+            tau = R_th * cap.capacitance
+            if tau > 0 and tau < 1e5:
+                taus.append(tau)
+        except np.linalg.LinAlgError:
+            pass
+            
     return max(taus) if taus else None
