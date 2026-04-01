@@ -698,6 +698,10 @@ class BreadboardSimulator:
             self.draw_custom_resistor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
             return
 
+        if component.name == "Capacitor":
+            self.draw_custom_capacitor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
+            return
+
         body_length = 40
         if length > body_length:
             scale = (length - body_length) / 2 / length
@@ -769,6 +773,47 @@ class BreadboardSimulator:
         rect = rotated_surf.get_rect(center=(mid_x, mid_y))
         self.screen.blit(rotated_surf, rect)
 
+    def draw_custom_capacitor(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
+        pygame.draw.line(self.screen, (150, 150, 150), start_pos, (mid_x, mid_y), 2)
+        pygame.draw.line(self.screen, (150, 150, 150), end_pos, (mid_x, mid_y), 2)
+        
+        cyl_w = 18
+        cyl_h = 28
+        ellipse_h = 8
+        
+        surf = pygame.Surface((cyl_w, cyl_h + ellipse_h), pygame.SRCALPHA)
+        
+        body_color = (25, 25, 30)
+        stripe_color = (210, 210, 210)
+        silver = (170, 170, 180)
+        
+        pygame.draw.ellipse(surf, body_color, (0, cyl_h, cyl_w, ellipse_h))
+        
+        pygame.draw.rect(surf, body_color, (0, ellipse_h // 2, cyl_w, cyl_h))
+        
+        stripe_w = 4
+        stripe_offset = cyl_w - stripe_w - 1
+        pygame.draw.rect(surf, stripe_color, (stripe_offset, ellipse_h // 2, stripe_w, cyl_h))
+        
+        pygame.draw.ellipse(surf, stripe_color, (stripe_offset, cyl_h + 1, stripe_w, ellipse_h - 2))
+        
+        pygame.draw.ellipse(surf, silver, (0, 0, cyl_w, ellipse_h))
+        
+        pygame.draw.ellipse(surf, body_color, (0, 0, cyl_w, ellipse_h), 2)
+        
+        cx, cy = cyl_w // 2, ellipse_h // 2
+        pygame.draw.line(surf, (100, 100, 100), (cx - 3, cy), (cx + 3, cy), 1)
+        pygame.draw.line(surf, (100, 100, 100), (cx, cy - 2), (cx, cy + 2), 1)
+        
+        for y_pos in [10, 18, 26]:
+            pygame.draw.line(surf, (0, 0, 0), (stripe_offset + 1, y_pos), (stripe_offset + 3, y_pos), 1)
+            
+        pygame.draw.line(surf, (70, 70, 80), (3, ellipse_h // 2), (3, cyl_h + ellipse_h // 2 - 2), 2)
+        
+        target_rect = surf.get_rect(midbottom=(mid_x, mid_y + ellipse_h // 2 - 2))
+        
+        self.screen.blit(surf, target_rect.topleft)
+
     def draw_fallback_component(self, component, x, y, angle, length):
         surf = pygame.Surface((length, 20), pygame.SRCALPHA)
         
@@ -832,6 +877,8 @@ class BreadboardSimulator:
         self.sim_reset_button = Button(785, 35, 40, 35, "", None, symbol='reset')
             
         self.sim_time_widget = NumericCounter(980, 30, 80, 45, label="Time(s)", value=0.0, step=1.0, min_val=0.0, max_val=1e6)
+        
+        self.clear_button = Button(1100, 650, 80, 30, "Clear", None)
     
     def open_param_widget_for(self, btn):
         anchor_x = btn.rect.x
@@ -1016,6 +1063,9 @@ class BreadboardSimulator:
         # Draw Side Panel
         if self.side_panel.visible:
             self.side_panel.draw(self.screen)
+            
+        self.clear_button.draw(self.screen, self.small_font)
+        
     def handle_click(self, pos, button=1):
         # Right click for selection
         if button == 3:
@@ -1067,6 +1117,27 @@ class BreadboardSimulator:
                 self.param_unit_widget = None
                 self.param_for = None
 
+
+        if self.clear_button.rect.collidepoint(pos):
+            self.components.clear()
+            self.mergers.clear()
+            for h in self.holes:
+                h.occupied = False
+            self.first_hole = None
+            self.selected_component = None
+            self.side_panel.visible = False
+            self.side_panel.component = None
+            
+            if self.is_simulating:
+                self.is_simulating = False
+                self.sim_time = 0.0
+                self.sim_paused = False
+                if self.sim_time_widget:
+                    self.sim_time_widget.value = 0.0
+                    self.sim_time_widget.text = "0.0"
+                    
+            self.rebuild_circuit()
+            return
 
         # Check buttons
         for btn in self.buttons:
@@ -1243,6 +1314,11 @@ class BreadboardSimulator:
             
         active_nodes = list(set([c.node_id_1 for c in self.components] + [c.node_id_2 for c in self.components]))
         tau = calculate_time_constant(self.components)
+        if tau is None or tau < 1e-6:
+            total_R = sum(c.resistance for c in self.components if isinstance(c, Resistor))
+            total_C = sum(c.capacitance for c in self.components if isinstance(c, Capacitor))
+            if total_R > 0 and total_C > 0:
+                tau = total_R * total_C
         self.current_tau = tau
         dt_base = tau / 60.0 if tau else 1/60.0
         self.current_dt = dt_base
@@ -1334,6 +1410,11 @@ class BreadboardSimulator:
                     try:
                         matrix = generate_incidence_matrix(self.components, active_nodes)
                         tau = calculate_time_constant(self.components)
+                        if tau is None or tau < 1e-6:
+                            total_R = sum(c.resistance for c in self.components if isinstance(c, Resistor))
+                            total_C = sum(c.capacitance for c in self.components if isinstance(c, Capacitor))
+                            if total_R > 0 and total_C > 0:
+                                tau = total_R * total_C
                         self.current_tau = tau
                         dt_base = tau / 60.0 if tau else 1/60.0
                         self.current_dt = dt_base
@@ -1345,9 +1426,7 @@ class BreadboardSimulator:
                             
                         self.sim_time += dt_base
                     except Exception as e:
-                        print(f"Simulation error: {e}")
-                        self.is_simulating = False
-                        self.run_button.text = "Run"
+                        print(f"Simulation warning: {e}")
             
             self.screen.fill(BG_COLOR)
             

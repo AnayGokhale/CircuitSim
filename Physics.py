@@ -210,72 +210,123 @@ def calculate_time_constant(components):
         
     taus = []
 
-    # Method 1: Check time constant with all other capacitors OPEN
-    for m, cap in enumerate(capacitors):
-        ci = all_nodes.index(cap.node_id_1)
-        cj = all_nodes.index(cap.node_id_2)
+    # Group parallel capacitors by their node pair (order-independent)
+    cap_groups = {}
+    for cap in capacitors:
+        key = (min(cap.node_id_1, cap.node_id_2), max(cap.node_id_1, cap.node_id_2))
+        if key not in cap_groups:
+            cap_groups[key] = []
+        cap_groups[key].append(cap)
+
+    # Method 1: For each capacitor GROUP, compute tau with all other groups OPEN
+    for group_key, group_caps in cap_groups.items():
+        ci = all_nodes.index(group_key[0])
+        cj = all_nodes.index(group_key[1])
         if ci == cj:
             continue
-            
+
+        C_total = sum(c.capacitance for c in group_caps)
+
         Y_cap = np.copy(Y)
         for i in range(n):
             Y_cap[i][i] += 1e-12
-            
+
         I_vec = np.zeros(n)
         I_vec[ci] = 1.0
         I_vec[cj] = -1.0
-        
+
         ref = 0
         Y_red = np.delete(np.delete(Y_cap, ref, axis=0), ref, axis=1)
         I_red = np.delete(I_vec, ref)
-        
+
         try:
             V_red = np.linalg.solve(Y_red, I_red)
             V_full = np.insert(V_red, ref, 0.0)
             R_th = abs(V_full[ci] - V_full[cj])
-            tau = R_th * cap.capacitance
-            if tau > 0 and tau < 1e5:
+            tau = R_th * C_total
+            if tau > 1e-9 and tau < 1e5:
                 taus.append(tau)
         except np.linalg.LinAlgError:
             pass
 
-    # Method 2: Check time constant with all other capacitors SHORTED
-    for m, cap in enumerate(capacitors):
-        ci = all_nodes.index(cap.node_id_1)
-        cj = all_nodes.index(cap.node_id_2)
+    # Method 2: For each capacitor GROUP, compute tau with all other groups SHORTED
+    group_keys = list(cap_groups.keys())
+    for gidx, group_key in enumerate(group_keys):
+        ci = all_nodes.index(group_key[0])
+        cj = all_nodes.index(group_key[1])
         if ci == cj:
             continue
-            
+
+        C_total = sum(c.capacitance for c in cap_groups[group_key])
+
         Y_cap = np.copy(Y)
-        for k, other_cap in enumerate(capacitors):
-            if k == m: continue
+        # Short all OTHER groups
+        for oidx, other_key in enumerate(group_keys):
+            if oidx == gidx:
+                continue
             g = 1e9
-            oki = all_nodes.index(other_cap.node_id_1)
-            okj = all_nodes.index(other_cap.node_id_2)
+            oki = all_nodes.index(other_key[0])
+            okj = all_nodes.index(other_key[1])
             Y_cap[oki][oki] += g
             Y_cap[okj][okj] += g
             Y_cap[oki][okj] -= g
             Y_cap[okj][oki] -= g
-            
+
         for i in range(n):
             Y_cap[i][i] += 1e-12
-            
+
         I_vec = np.zeros(n)
         I_vec[ci] = 1.0
         I_vec[cj] = -1.0
-        
+
         ref = 0
         Y_red = np.delete(np.delete(Y_cap, ref, axis=0), ref, axis=1)
         I_red = np.delete(I_vec, ref)
-        
+
         try:
             V_red = np.linalg.solve(Y_red, I_red)
             V_full = np.insert(V_red, ref, 0.0)
             R_th = abs(V_full[ci] - V_full[cj])
-            tau = R_th * cap.capacitance
-            if tau > 0 and tau < 1e5:
+            tau = R_th * C_total
+            if tau > 1e-9 and tau < 1e5:
                 taus.append(tau)
         except np.linalg.LinAlgError:
             pass
+
+    # Method 3: Eigenvalue method for arbitrary topologies (handles series caps)
+    # Solves the generalized eigenvalue problem Y·v = λ·C·v
+    # Time constants are τ = 1/λ for each positive real eigenvalue
+    try:
+        from scipy.linalg import eig
+        
+        # Build capacitance matrix (same stamp pattern as conductance)
+        C_mat = np.zeros((n, n))
+        for cap in capacitors:
+            ci = all_nodes.index(cap.node_id_1)
+            cj = all_nodes.index(cap.node_id_2)
+            C_mat[ci][ci] += cap.capacitance
+            C_mat[cj][cj] += cap.capacitance
+            C_mat[ci][cj] -= cap.capacitance
+            C_mat[cj][ci] -= cap.capacitance
+        
+        # Remove reference node (ground)
+        ref = 0
+        Y_eig = np.delete(np.delete(Y, ref, axis=0), ref, axis=1)
+        C_eig = np.delete(np.delete(C_mat, ref, axis=0), ref, axis=1)
+        
+        # Small regularization for numerical stability
+        for i in range(len(Y_eig)):
+            Y_eig[i][i] += 1e-12
+        
+        # Solve generalized eigenvalue problem: Y·v = λ·C·v
+        eigenvalues, _ = eig(Y_eig, C_eig)
+        
+        for ev in eigenvalues:
+            if np.isreal(ev) and np.isfinite(ev.real) and ev.real > 1e-6:
+                tau_ev = 1.0 / ev.real
+                if tau_ev > 1e-9 and tau_ev < 1e5:
+                    taus.append(tau_ev)
+    except Exception:
+        pass
             
     return max(taus) if taus else None
