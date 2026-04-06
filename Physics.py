@@ -1,4 +1,4 @@
-from Components import Wire, Battery, Resistor, Capacitor, LED
+from Components import Wire, Battery, Resistor, Capacitor, Inductor, LED
 import numpy as np
 from scipy.linalg import null_space
 
@@ -17,6 +17,11 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
             if i == j:
                 if loads[i].name == "Capacitor":
                     G[i][j] = loads[i].capacitance / dt
+                elif loads[i].name == "Inductor":
+                    if loads[i].inductance > 0:
+                        G[i][j] = dt / loads[i].inductance
+                    else:
+                        G[i][j] = 1e9
                 else:
                     if loads[i].resistance > 0:
                         G[i][j] = 1 / loads[i].resistance
@@ -34,7 +39,7 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         for i in range(len(active_nodes)):
             Master[i][i] += GMIN
             
-        # Add historical current from capacitors
+        # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
             if component.name == "Capacitor":
                 Ieq = (component.capacitance / dt) * component._prev_voltage_drop
@@ -44,6 +49,14 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                 if component.node_id_2 in active_nodes:
                     idx2 = active_nodes.index(component.node_id_2)
                     Z[idx2] -= Ieq
+            elif component.name == "Inductor":
+                Ieq = component._prev_current
+                if component.node_id_1 in active_nodes:
+                    idx1 = active_nodes.index(component.node_id_1)
+                    Z[idx1] -= Ieq
+                if component.node_id_2 in active_nodes:
+                    idx2 = active_nodes.index(component.node_id_2)
+                    Z[idx2] += Ieq
         
         gnd_idx = active_nodes.index(0) if 0 in active_nodes else 0
         
@@ -69,7 +82,7 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         for i in range(len(active_nodes)):
             Master[i][i] += GMIN
 
-        # Add historical current from capacitors
+        # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
             if component.name == "Capacitor":
                 Ieq = (component.capacitance / dt) * component._prev_voltage_drop
@@ -79,6 +92,14 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                 if component.node_id_2 in active_nodes:
                     idx2 = active_nodes.index(component.node_id_2)
                     Z[idx2] -= Ieq
+            elif component.name == "Inductor":
+                Ieq = component._prev_current
+                if component.node_id_1 in active_nodes:
+                    idx1 = active_nodes.index(component.node_id_1)
+                    Z[idx1] -= Ieq
+                if component.node_id_2 in active_nodes:
+                    idx2 = active_nodes.index(component.node_id_2)
+                    Z[idx2] += Ieq
 
         for i, source in enumerate(sources):
             Z[i + len(active_nodes)] = source.voltage
@@ -112,7 +133,7 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         source.current = float(battery_currents[i])
 
     for component in components:
-        if isinstance(component, Resistor) or isinstance(component, LED) or isinstance(component, Capacitor):
+        if isinstance(component, (Resistor, LED, Capacitor, Inductor)):
             v1 = voltage_dict.get(component.node_id_1, 0)
             v2 = voltage_dict.get(component.node_id_2, 0)
             
@@ -125,6 +146,11 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                 component.current = G_eq * (v_drop - V_old)
                 component.voltage_drop = abs(v_drop)
                 component._prev_voltage_drop = v_drop
+            elif isinstance(component, Inductor):
+                G_eq = dt / component.inductance if component.inductance > 0 else 1e9
+                component.current = G_eq * v_drop + component._prev_current
+                component.voltage_drop = abs(v_drop)
+                component._prev_current = component.current
             else:
                 component.voltage_drop = abs(v_drop)
                 if component.resistance > 0:
@@ -174,9 +200,14 @@ def calculate_resistance_in_parallel(resistances):
 def calculate_time_constant(components):
     resistive = [c for c in components if isinstance(c, (Resistor, LED))]
     capacitors = [c for c in components if isinstance(c, Capacitor)]
+    inductors = [c for c in components if isinstance(c, Inductor)]
     batteries = [c for c in components if isinstance(c, Battery)]
     
-    if not resistive or not capacitors:
+    has_rc = resistive and capacitors
+    has_rl = resistive and inductors
+    has_lc = inductors and capacitors
+    
+    if not has_rc and not has_rl and not has_lc:
         return None
     
     all_nodes = list(set(
@@ -210,7 +241,47 @@ def calculate_time_constant(components):
         
     taus = []
 
-    # Group parallel capacitors by their node pair (order-independent)
+    # RL time constants: tau = L / R
+    for ind in inductors:
+        ci = all_nodes.index(ind.node_id_1)
+        cj = all_nodes.index(ind.node_id_2)
+        if ci == cj:
+            continue
+        
+        Y_ind = np.copy(Y)
+        for i in range(n):
+            Y_ind[i][i] += 1e-12
+        
+        I_vec = np.zeros(n)
+        I_vec[ci] = 1.0
+        I_vec[cj] = -1.0
+        
+        ref = 0
+        Y_red = np.delete(np.delete(Y_ind, ref, axis=0), ref, axis=1)
+        I_red = np.delete(I_vec, ref)
+        
+        try:
+            V_red = np.linalg.solve(Y_red, I_red)
+            V_full = np.insert(V_red, ref, 0.0)
+            R_th = abs(V_full[ci] - V_full[cj])
+            if R_th > 1e-12:
+                tau = ind.inductance / R_th
+                if tau > 1e-12 and tau < 1e5:
+                    taus.append(tau)
+        except np.linalg.LinAlgError:
+            pass
+
+    # LC natural period: tau = 2*pi*sqrt(L*C)
+    if has_lc:
+        total_L = sum(ind.inductance for ind in inductors)
+        total_C = sum(cap.capacitance for cap in capacitors)
+        if total_L > 0 and total_C > 0:
+            import math
+            tau_lc = 2 * math.pi * math.sqrt(total_L * total_C)
+            if tau_lc > 1e-12 and tau_lc < 1e5:
+                taus.append(tau_lc)
+
+    # Group parallel capacitors by their node pair
     cap_groups = {}
     for cap in capacitors:
         key = (min(cap.node_id_1, cap.node_id_2), max(cap.node_id_1, cap.node_id_2))
@@ -218,7 +289,7 @@ def calculate_time_constant(components):
             cap_groups[key] = []
         cap_groups[key].append(cap)
 
-    # Method 1: For each capacitor GROUP, compute tau with all other groups OPEN
+    #For each capacitor GROUP, compute tau with all other groups OPEN
     for group_key, group_caps in cap_groups.items():
         ci = all_nodes.index(group_key[0])
         cj = all_nodes.index(group_key[1])
@@ -249,7 +320,7 @@ def calculate_time_constant(components):
         except np.linalg.LinAlgError:
             pass
 
-    # Method 2: For each capacitor GROUP, compute tau with all other groups SHORTED
+    #For each capacitor GROUP, compute tau with all other groups SHORTED
     group_keys = list(cap_groups.keys())
     for gidx, group_key in enumerate(group_keys):
         ci = all_nodes.index(group_key[0])
@@ -293,13 +364,10 @@ def calculate_time_constant(components):
         except np.linalg.LinAlgError:
             pass
 
-    # Method 3: Eigenvalue method for arbitrary topologies (handles series caps)
-    # Solves the generalized eigenvalue problem Y·v = λ·C·v
-    # Time constants are τ = 1/λ for each positive real eigenvalue
     try:
         from scipy.linalg import eig
         
-        # Build capacitance matrix (same stamp pattern as conductance)
+        # Build capacitance matrix 
         C_mat = np.zeros((n, n))
         for cap in capacitors:
             ci = all_nodes.index(cap.node_id_1)
@@ -309,7 +377,7 @@ def calculate_time_constant(components):
             C_mat[ci][cj] -= cap.capacitance
             C_mat[cj][ci] -= cap.capacitance
         
-        # Remove reference node (ground)
+        # Remove reference node
         ref = 0
         Y_eig = np.delete(np.delete(Y, ref, axis=0), ref, axis=1)
         C_eig = np.delete(np.delete(C_mat, ref, axis=0), ref, axis=1)

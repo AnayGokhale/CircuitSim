@@ -1,5 +1,5 @@
 '''
-Included components: Wire, Battery, Resistor, Capacitor, LED
+Included components: Wire, Battery, Resistor, Capacitor, Inductor, LED
 '''
 class Wire:
     def __init__(self, node1, node2, name="Wire"):
@@ -66,6 +66,18 @@ class Capacitor:
         self.name = name
         self.current = 0.0
         self._prev_voltage_drop = 0.0
+
+class Inductor:
+    def __init__(self, node1, node2, node_id_1, node_id_2, inductance, voltage_drop, name="Inductor"):
+        self.node1 = node1
+        self.node2 = node2
+        self.node_id_1 = node_id_1
+        self.node_id_2 = node_id_2
+        self.inductance = inductance
+        self.voltage_drop = voltage_drop
+        self.name = name
+        self.current = 0.0
+        self._prev_current = 0.0
 
 class LED:
     def __init__(self, node1, node2, node_id_1, node_id_2, resistance, voltage_drop, color, name="LED"):

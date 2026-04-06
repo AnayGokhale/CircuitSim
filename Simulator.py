@@ -1,7 +1,7 @@
 import pygame
 import sys
 import math
-from Components import Wire, Battery, Resistor, Capacitor, LED
+from Components import Wire, Battery, Resistor, Capacitor, Inductor, LED
 from Physics import generate_incidence_matrix, ModifiedNodalAnalysis, calculate_time_constant
 # Initialize Pygame
 pygame.init()
@@ -409,6 +409,19 @@ class SidePanel:
                     draw_text(f"\u03c4: {format_si(tau, 's')}")
                 else:
                     draw_text(f"\u03c4: Does not Exist")
+
+        elif isinstance(self.component, Inductor):
+            draw_text(f"Inductance: {format_si(self.component.inductance, 'H')}")
+            if self.simulator.is_simulating or self.simulator.sim_paused:
+                draw_text(f"Voltage Drop: {format_si(self.component.voltage_drop, 'V')}")
+                draw_text(f"Current: {format_si(self.component.current, 'A')}")
+                energy = 0.5 * self.component.inductance * self.component.current ** 2
+                draw_text(f"Energy: {format_si(energy, 'J')}")
+                tau = self.simulator.current_tau
+                if tau:
+                    draw_text(f"\u03c4: {format_si(tau, 's')}")
+                else:
+                    draw_text(f"\u03c4: Does not Exist")
             
         elif isinstance(self.component, Battery):
             draw_text(f"Voltage: {format_si(self.component.voltage, 'V')}")
@@ -538,6 +551,7 @@ class BreadboardSimulator:
             "Battery":   {"val": 9.0, "unit": "V"},
             "Resistor":  {"val": 330, "unit": "Ω"},
             "Capacitor": {"val": 10.0, "unit": "µF"},
+            "Inductor":  {"val": 10.0, "unit": "mH"},
             "LED":       "red"
         }
     def load_assets(self):
@@ -702,6 +716,10 @@ class BreadboardSimulator:
             self.draw_custom_capacitor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
             return
 
+        if component.name == "Inductor":
+            self.draw_custom_inductor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
+            return
+
         body_length = 40
         if length > body_length:
             scale = (length - body_length) / 2 / length
@@ -814,6 +832,59 @@ class BreadboardSimulator:
         
         self.screen.blit(surf, target_rect.topleft)
 
+    def draw_custom_inductor(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
+        # Draw leads from holes to the center
+        pygame.draw.line(self.screen, (150, 150, 150), start_pos, (mid_x, mid_y), 2)
+        pygame.draw.line(self.screen, (150, 150, 150), end_pos, (mid_x, mid_y), 2)
+        
+        # Draw a toroidal inductor component (fixed size at center)
+        body_w = 30
+        body_h = 24
+        
+        surf = pygame.Surface((body_w, body_h + 6), pygame.SRCALPHA)
+        
+        # Colors
+        core_color = (60, 80, 50)       # Dark green-brown ferrite core
+        core_light = (80, 110, 65)      # Lighter highlight
+        wire_color = (200, 140, 50)     # Copper wire color
+        wire_dark = (160, 100, 30)      # Darker copper for depth
+        
+        cx = body_w // 2
+        cy = body_h // 2 + 2
+        
+        # Draw the toroidal core body (flattened torus shape)
+        outer_rx = 13
+        outer_ry = 10
+        inner_rx = 6
+        inner_ry = 4
+        
+        # Outer ellipse (core body)
+        pygame.draw.ellipse(surf, core_color, (cx - outer_rx, cy - outer_ry, outer_rx * 2, outer_ry * 2))
+        pygame.draw.ellipse(surf, core_light, (cx - outer_rx + 2, cy - outer_ry + 1, outer_rx * 2 - 8, outer_ry * 2 - 6))
+        pygame.draw.ellipse(surf, core_color, (cx - outer_rx, cy - outer_ry, outer_rx * 2, outer_ry * 2), 2)
+        
+        # Inner hole of the toroid
+        pygame.draw.ellipse(surf, (0, 0, 0, 0), (cx - inner_rx, cy - inner_ry, inner_rx * 2, inner_ry * 2))
+        pygame.draw.ellipse(surf, (40, 40, 40), (cx - inner_rx, cy - inner_ry, inner_rx * 2, inner_ry * 2), 1)
+        
+        # Draw wire coils wrapping around the toroid
+        num_coils = 7
+        for i in range(num_coils):
+            coil_angle = -0.7 + (i / (num_coils - 1)) * 1.4
+            coil_x = int(cx + outer_rx * 0.85 * math.sin(coil_angle))
+            coil_y_top = int(cy - outer_ry + 1)
+            coil_y_bot = int(cy + outer_ry - 1)
+            
+            pygame.draw.line(surf, wire_dark, (coil_x, coil_y_top), (coil_x, coil_y_bot), 2)
+            pygame.draw.line(surf, wire_color, (coil_x - 1, coil_y_top), (coil_x - 1, coil_y_bot), 1)
+        
+        # Connection dots at left and right
+        pygame.draw.circle(surf, wire_color, (2, cy), 2)
+        pygame.draw.circle(surf, wire_color, (body_w - 2, cy), 2)
+        
+        target_rect = surf.get_rect(center=(int(mid_x), int(mid_y)))
+        self.screen.blit(surf, target_rect.topleft)
+
     def draw_fallback_component(self, component, x, y, angle, length):
         surf = pygame.Surface((length, 20), pygame.SRCALPHA)
         
@@ -843,6 +914,16 @@ class BreadboardSimulator:
             pygame.draw.line(surf, (0, 0, 0), (length//2 - 5, 2), (length//2 - 5, 18), 3)
             pygame.draw.line(surf, (0, 0, 0), (length//2 + 5, 2), (length//2 + 5, 18), 3)
 
+        elif component.name == "Inductor":
+            color = (200, 140, 50)
+            label = f"{format_si(component.inductance, 'H')}"
+            # Draw coil bumps
+            num_bumps = 4
+            bump_w = (length - 20) // num_bumps
+            for i in range(num_bumps):
+                bx = 10 + i * bump_w
+                pygame.draw.arc(surf, color, (bx, 2, bump_w, 16), 0, 3.14, 3)
+
         elif component.name == "LED":
             c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
                      "yellow": (255, 255, 0), "white": (255, 255, 255)}
@@ -862,10 +943,10 @@ class BreadboardSimulator:
     def create_buttons(self):
         # Component buttons
         self.buttons = []
-        componentsList = [Wire, Battery, Resistor, Capacitor, LED]
-        component_text = ["Wire", "Battery", "Resistor", "Capacitor", "LED"]
+        componentsList = [Wire, Battery, Resistor, Capacitor, Inductor, LED]
+        component_text = ["Wire", "Battery", "Resistor", "Capacitor", "Inductor", "LED"]
         for i, comp in enumerate(component_text):
-            btn = Button(50 + i * 115, 30, 105, 45, comp, componentsList[i])
+            btn = Button(50 + i * 98, 30, 88, 45, comp, componentsList[i])
             if comp == self.active_component_txt:
                 btn.selected = True
             self.buttons.append(btn)
@@ -921,6 +1002,18 @@ class BreadboardSimulator:
             self.param_unit_widget = UnitDropdown(anchor_x + 130 + 60 + 40, anchor_y, 50, 30, unit_opts, default["unit"])
             
             self.param_for = "Capacitor"
+
+        elif btn.text == "Inductor":
+            default = self.component_defaults.get("Inductor", {"val": 10.0, "unit": "mH"})
+            widget = NumericCounter(anchor_x + 120, anchor_y, 60, 30,
+                                    label="Inductance", value=default["val"], step=1, min_val=1e-12, max_val=10000)
+            widget.set_position(anchor_x + 120, anchor_y)
+            self.param_widget = widget
+            
+            unit_opts = ["H", "mH", "µH", "nH"]
+            self.param_unit_widget = UnitDropdown(anchor_x + 120 + 60 + 40, anchor_y, 50, 30, unit_opts, default["unit"])
+            
+            self.param_for = "Inductor"
 
         elif btn.text == "LED":
             # Create dropdown for LED color
@@ -1174,6 +1267,10 @@ class BreadboardSimulator:
                         c.voltage_drop = 0.0
                         c._prev_voltage_drop = 0.0
                         c.current = 0.0
+                    elif isinstance(c, Inductor):
+                        c.voltage_drop = 0.0
+                        c.current = 0.0
+                        c._prev_current = 0.0
                     elif isinstance(c, Resistor) or isinstance(c, LED):
                         c.voltage_drop = 0.0
                         c.current = 0.0
@@ -1255,6 +1352,8 @@ class BreadboardSimulator:
                         self.active_component = Resistor(0, 0, None, None, self.active_component.resistance, 0.0)
                     elif isinstance(self.active_component, Capacitor):
                         self.active_component = Capacitor(0, 0, None, None, self.active_component.capacitance, 0.0)
+                    elif isinstance(self.active_component, Inductor):
+                        self.active_component = Inductor(0, 0, None, None, self.active_component.inductance, 0.0)
                     elif isinstance(self.active_component, LED):
                         self.active_component = LED(0, 0, None, None, 220, 0.0, self.active_component.color)
                         
@@ -1271,8 +1370,10 @@ class BreadboardSimulator:
              u = self.param_unit_widget.selected_option
              if u in ["kV", "kΩ"]: multiplier = 1e3
              elif u in ["MΩ"]: multiplier = 1e6
-             elif u in ["mV", "mΩ", "mF"]: multiplier = 1e-3
-             elif u in ["µF"]: multiplier = 1e-6
+             elif u in ["mV", "mΩ", "mF", "mH"]: multiplier = 1e-3
+             elif u in ["µF", "µH"]: multiplier = 1e-6
+             elif u in ["nF", "nH"]: multiplier = 1e-9
+             elif u in ["pF"]: multiplier = 1e-12
         if self.active_component_txt == "LED":
             actual_val = value # For LEDs, value is the color string
         else:
@@ -1287,6 +1388,9 @@ class BreadboardSimulator:
         elif self.active_component_txt == "Capacitor":
              self.active_component = Capacitor(0, 0, None, None, actual_val, 0.0)
              self.component_defaults["Capacitor"] = {"val": value, "unit": u}
+        elif self.active_component_txt == "Inductor":
+             self.active_component = Inductor(0, 0, None, None, actual_val, 0.0)
+             self.component_defaults["Inductor"] = {"val": value, "unit": u}
         elif self.active_component_txt == "LED":
              self.active_component = LED(0, 0, None, None, 220, 0.0, value)
              self.component_defaults["LED"] = value
@@ -1303,6 +1407,10 @@ class BreadboardSimulator:
                 c.voltage_drop = 0.0
                 c._prev_voltage_drop = 0.0
                 c.current = 0.0
+            elif isinstance(c, Inductor):
+                c.voltage_drop = 0.0
+                c.current = 0.0
+                c._prev_current = 0.0
             elif isinstance(c, Resistor) or isinstance(c, LED):
                 c.voltage_drop = 0.0
                 c.current = 0.0
@@ -1317,8 +1425,14 @@ class BreadboardSimulator:
         if tau is None or tau < 1e-6:
             total_R = sum(c.resistance for c in self.components if isinstance(c, Resistor))
             total_C = sum(c.capacitance for c in self.components if isinstance(c, Capacitor))
+            total_L = sum(c.inductance for c in self.components if isinstance(c, Inductor))
             if total_R > 0 and total_C > 0:
                 tau = total_R * total_C
+            elif total_R > 0 and total_L > 0:
+                tau = total_L / total_R
+            elif total_L > 0 and total_C > 0:
+                import math
+                tau = 2 * math.pi * math.sqrt(total_L * total_C)
         self.current_tau = tau
         dt_base = tau / 60.0 if tau else 1/60.0
         self.current_dt = dt_base
@@ -1413,8 +1527,14 @@ class BreadboardSimulator:
                         if tau is None or tau < 1e-6:
                             total_R = sum(c.resistance for c in self.components if isinstance(c, Resistor))
                             total_C = sum(c.capacitance for c in self.components if isinstance(c, Capacitor))
+                            total_L = sum(c.inductance for c in self.components if isinstance(c, Inductor))
                             if total_R > 0 and total_C > 0:
                                 tau = total_R * total_C
+                            elif total_R > 0 and total_L > 0:
+                                tau = total_L / total_R
+                            elif total_L > 0 and total_C > 0:
+                                import math
+                                tau = 2 * math.pi * math.sqrt(total_L * total_C)
                         self.current_tau = tau
                         dt_base = tau / 60.0 if tau else 1/60.0
                         self.current_dt = dt_base
