@@ -241,45 +241,7 @@ def calculate_time_constant(components):
         
     taus = []
 
-    # RL time constants: tau = L / R
-    for ind in inductors:
-        ci = all_nodes.index(ind.node_id_1)
-        cj = all_nodes.index(ind.node_id_2)
-        if ci == cj:
-            continue
-        
-        Y_ind = np.copy(Y)
-        for i in range(n):
-            Y_ind[i][i] += 1e-12
-        
-        I_vec = np.zeros(n)
-        I_vec[ci] = 1.0
-        I_vec[cj] = -1.0
-        
-        ref = 0
-        Y_red = np.delete(np.delete(Y_ind, ref, axis=0), ref, axis=1)
-        I_red = np.delete(I_vec, ref)
-        
-        try:
-            V_red = np.linalg.solve(Y_red, I_red)
-            V_full = np.insert(V_red, ref, 0.0)
-            R_th = abs(V_full[ci] - V_full[cj])
-            if R_th > 1e-12:
-                tau = ind.inductance / R_th
-                if tau > 1e-12 and tau < 1e5:
-                    taus.append(tau)
-        except np.linalg.LinAlgError:
-            pass
 
-    # LC natural period: tau = 2*pi*sqrt(L*C)
-    if has_lc:
-        total_L = sum(ind.inductance for ind in inductors)
-        total_C = sum(cap.capacitance for cap in capacitors)
-        if total_L > 0 and total_C > 0:
-            import math
-            tau_lc = 2 * math.pi * math.sqrt(total_L * total_C)
-            if tau_lc > 1e-12 and tau_lc < 1e5:
-                taus.append(tau_lc)
 
     # Group parallel capacitors by their node pair
     cap_groups = {}
@@ -366,8 +328,15 @@ def calculate_time_constant(components):
 
     try:
         from scipy.linalg import eig
+
+        num_v = n
+        num_i = len(inductors)
+        size = num_v + num_i
         
-        # Build capacitance matrix 
+        M_desc = np.zeros((size, size))
+        N_desc = np.zeros((size, size))
+        
+        # M_desc top-left is C_mat
         C_mat = np.zeros((n, n))
         for cap in capacitors:
             ci = all_nodes.index(cap.node_id_1)
@@ -376,23 +345,44 @@ def calculate_time_constant(components):
             C_mat[cj][cj] += cap.capacitance
             C_mat[ci][cj] -= cap.capacitance
             C_mat[cj][ci] -= cap.capacitance
+            
+        M_desc[:n, :n] = C_mat
         
-        # Remove reference node
+        # M_desc bottom-right is L_mat
+        for k, ind in enumerate(inductors):
+            M_desc[n+k, n+k] = ind.inductance
+            
+        # N_desc top-left is Y matrix (already computed as Y)
+        N_desc[:n, :n] = Y
+        
+        # N_desc top-right is A_L and bottom-left is -A_L^T
+        for k, ind in enumerate(inductors):
+            ci = all_nodes.index(ind.node_id_1)
+            cj = all_nodes.index(ind.node_id_2)
+            
+            # Current flows from node_id_1 to node_id_2
+            N_desc[ci, n+k] += 1.0
+            N_desc[cj, n+k] -= 1.0
+            
+            N_desc[n+k, ci] -= 1.0
+            N_desc[n+k, cj] += 1.0
+
+        # Remove reference node block
         ref = 0
-        Y_eig = np.delete(np.delete(Y, ref, axis=0), ref, axis=1)
-        C_eig = np.delete(np.delete(C_mat, ref, axis=0), ref, axis=1)
+        M_eig = np.delete(np.delete(M_desc, ref, axis=0), ref, axis=1)
+        N_eig = np.delete(np.delete(N_desc, ref, axis=0), ref, axis=1)
         
-        # Small regularization for numerical stability
-        for i in range(len(Y_eig)):
-            Y_eig[i][i] += 1e-12
+        # General regularization for numerical stability
+        for i in range(len(N_eig)):
+            N_eig[i][i] += 1e-12
         
-        # Solve generalized eigenvalue problem: Y·v = λ·C·v
-        eigenvalues, _ = eig(Y_eig, C_eig)
+        # Solve generalized eigenvalue problem: N·X = λ·M·X
+        eigenvalues, _ = eig(N_eig, M_eig)
         
         for ev in eigenvalues:
-            if np.isreal(ev) and np.isfinite(ev.real) and ev.real > 1e-6:
-                tau_ev = 1.0 / ev.real
-                if tau_ev > 1e-9 and tau_ev < 1e5:
+            if np.isfinite(ev) and abs(ev) > 1e-8:
+                tau_ev = 1.0 / abs(ev)
+                if tau_ev > 1e-12 and tau_ev < 1e5:
                     taus.append(tau_ev)
     except Exception:
         pass
