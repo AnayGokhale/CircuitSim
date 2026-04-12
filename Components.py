@@ -1,5 +1,5 @@
 '''
-Included components: Wire, Battery, Resistor, Capacitor, Inductor, LED
+Included components: Wire, Battery, Resistor, LED, Capacitor, Inductor
 '''
 class Wire:
     def __init__(self, node1, node2, name="Wire"):

@@ -1,0 +1,175 @@
+=== Test: Circuit 1: Series Resistors ===
+Calculated Tau (or 1/omega for LC): None
+
+Time: 0.00000e+00 s (t=0)
+Total Current (from Battery): 3.33333e-02 A
+Battery: 10 V, -3.33333e-02 A
+Resistor: 3.33333e+00 V, 3.33333e-02 A
+Resistor: 6.66667e+00 V, 3.33333e-02 A
+
+Time: 1.00000e-01 s (t=a lot relative to tau)
+Total Current (from Battery): 3.33333e-02 A
+Battery: 10 V, -3.33333e-02 A
+Resistor: 3.33333e+00 V, 3.33333e-02 A
+Resistor: 6.66667e+00 V, 3.33333e-02 A
+
+========================================
+
+=== Test: Circuit 2: Parallel Resistors ===
+Calculated Tau (or 1/omega for LC): None
+
+Time: 0.00000e+00 s (t=0)
+Total Current (from Battery): 1.50000e-01 A
+Battery: 10 V, -1.50000e-01 A
+Resistor: 1.00000e+01 V, 1.00000e-01 A
+Resistor: 1.00000e+01 V, 5.00000e-02 A
+
+Time: 1.00000e-01 s (t=a lot relative to tau)
+Total Current (from Battery): 1.50000e-01 A
+Battery: 10 V, -1.50000e-01 A
+Resistor: 1.00000e+01 V, 1.00000e-01 A
+Resistor: 1.00000e+01 V, 5.00000e-02 A
+
+========================================
+
+=== Test: Circuit 3: RC Series and Parallel Mixed ===
+Calculated Tau (or 1/omega for LC): 0.0023090169941697228
+
+Time: 0.00000e+00 s (t=0)
+Total Current (from Battery): 2.00000e-01 A
+Battery: 10 V, -2.00000e-01 A
+Resistor: 1.00000e+01 V, 2.00000e-01 A
+Resistor: 3.63636e-09 V, 3.63636e-11 A
+Capacitor: 3.63636e-09 V, 3.63636e-02 A, Charge: 3.63636e-14 C
+Resistor: 1.81818e-09 V, 9.09091e-12 A
+Capacitor: 1.81818e-09 V, 3.63636e-02 A, Charge: 3.63636e-14 C
+Resistor: 5.45455e-09 V, 1.81818e-11 A
+Capacitor: 5.45455e-09 V, 1.63636e-01 A, Charge: 1.63636e-13 C
+
+Time: 2.30902e-02 s (t=a lot relative to tau)
+Total Current (from Battery): 5.00020e-02 A
+Battery: 10 V, -5.00020e-02 A
+Resistor: 2.50010e+00 V, 5.00020e-02 A
+Resistor: 2.50018e+00 V, 2.50018e-02 A
+Capacitor: 2.50018e+00 V, -7.81068e-07 A, Charge: 2.50018e-05 C
+Resistor: 4.99972e+00 V, 2.49986e-02 A
+Capacitor: 4.99972e+00 V, 2.41923e-06 A, Charge: 9.99944e-05 C
+Resistor: 7.49990e+00 V, 2.49997e-02 A
+Capacitor: 7.49990e+00 V, 1.28564e-06 A, Charge: 2.24997e-04 C
+
+========================================
+
+=== Test: Circuit 4: RL Series and Parallel Mixed ===
+Calculated Tau (or 1/omega for LC): 0.0004000000000156595
+
+Time: 0.00000e+00 s (t=0)
+Total Current (from Battery): 5.00000e-02 A
+Battery: 10 V, -5.00000e-02 A
+Resistor: 2.50000e+00 V, 5.00000e-02 A
+Resistor: 2.50000e+00 V, 2.50000e-02 A
+Inductor: 2.50000e+00 V, 2.50000e-10 A, Energy: 3.12500e-22 J
+Resistor: 5.00000e+00 V, 2.50000e-02 A
+Inductor: 5.00000e+00 V, 2.50000e-10 A, Energy: 6.25000e-22 J
+Resistor: 7.50000e+00 V, 2.50000e-02 A
+Inductor: 7.50000e+00 V, 2.50000e-10 A, Energy: 9.37500e-22 J
+
+Time: 4.00000e-03 s (t=a lot relative to tau)
+Total Current (from Battery): 1.99993e-01 A
+Battery: 10 V, -1.99993e-01 A
+Resistor: 9.99964e+00 V, 1.99993e-01 A
+Resistor: 1.19280e-04 V, 1.19280e-06 A
+Inductor: 1.19280e-04 V, 9.99952e-02 A, Energy: 4.99952e-05 J
+Resistor: 2.38559e-04 V, 1.19280e-06 A
+Inductor: 2.38559e-04 V, 9.99952e-02 A, Energy: 9.99905e-05 J
+Resistor: 3.57839e-04 V, 1.19280e-06 A
+Inductor: 3.57839e-04 V, 9.99952e-02 A, Energy: 1.49986e-04 J
+
+========================================
+
+=== Test: Circuit 5: LC Series and Parallel Mixed ===
+Calculated Tau (or 1/omega for LC): 0.0007028443438160148
+
+Time: 0.00000e+00 s (t=0)
+Total Current (from Battery): 1.09091e+08 A
+Battery: 10 V, -1.09091e+08 A
+Capacitor: 5.45455e+00 V, 1.09091e+08 A, Charge: 5.45455e-05 C
+Inductor: 2.72727e+00 V, 1.36364e-10 A, Energy: 9.29752e-23 J
+Capacitor: 2.72727e+00 V, 1.09091e+08 A, Charge: 5.45455e-05 C
+Inductor: 1.81818e+00 V, 4.54545e-11 A, Energy: 2.06612e-23 J
+Capacitor: 1.81818e+00 V, 1.09091e+08 A, Charge: 5.45455e-05 C
+Inductor: 4.54545e+00 V, 7.57576e-11 A, Energy: 8.60882e-23 J
+
+Time: 4.96729e-04 s (t=T/4 (Peak component energy))
+Total Current (from Battery): 1.09091e+08 A
+Battery: 10 V, -1.09091e+08 A
+Capacitor: 7.27190e+00 V, 1.09091e+08 A, Charge: 7.27190e-05 C
+Inductor: 1.24586e+00 V, 1.09966e-01 A, Energy: 6.04625e-05 J
+Capacitor: 1.24586e+00 V, 1.09091e+08 A, Charge: 2.49173e-05 C
+Inductor: 1.48224e+00 V, 4.23626e-02 A, Energy: 1.79459e-05 J
+Capacitor: 1.48224e+00 V, 1.09091e+08 A, Charge: 4.44672e-05 C
+Inductor: 2.72810e+00 V, 6.48970e-02 A, Energy: 6.31743e-05 J
+
+Time: 9.93459e-04 s (t=T/2 (Half oscillation))
+Total Current (from Battery): 1.09091e+08 A
+Battery: 10 V, -1.09091e+08 A
+Capacitor: 1.11179e+01 V, 1.09091e+08 A, Charge: 1.11179e-04 C
+Inductor: 1.65271e+00 V, 9.93529e-02 A, Energy: 4.93550e-05 J
+Capacitor: 1.65271e+00 V, 1.09091e+08 A, Charge: 3.30542e-05 C
+Inductor: 5.34853e-01 V, 6.85127e-02 A, Energy: 4.69399e-05 J
+Capacitor: 5.34853e-01 V, 1.09091e+08 A, Charge: 1.60456e-05 C
+Inductor: 1.11785e+00 V, 7.87927e-02 A, Energy: 9.31244e-05 J
+
+Time: 1.49019e-03 s (t=3T/4 (Peak component energy))
+Total Current (from Battery): 1.09091e+08 A
+Battery: 10 V, -1.09091e+08 A
+Capacitor: 1.36860e+01 V, 1.09091e+08 A, Charge: 1.36860e-04 C
+Inductor: 2.91582e+00 V, -2.61134e-02 A, Energy: 3.40956e-06 J
+Capacitor: 2.91582e+00 V, 1.09091e+08 A, Charge: 5.83163e-05 C
+Inductor: 7.70163e-01 V, 6.58850e-02 A, Energy: 4.34083e-05 J
+Capacitor: 7.70163e-01 V, 1.09091e+08 A, Charge: 2.31049e-05 C
+Inductor: 3.68598e+00 V, 3.52188e-02 A, Energy: 1.86055e-05 J
+
+Time: 1.98692e-03 s (t=T (Full oscillation))
+Total Current (from Battery): 1.09091e+08 A
+Battery: 10 V, -1.09091e+08 A
+Capacitor: 1.30313e+01 V, 1.09091e+08 A, Charge: 1.30313e-04 C
+Inductor: 1.12601e+00 V, -1.37793e-01 A, Energy: 9.49347e-05 J
+Capacitor: 1.12601e+00 V, 1.09091e+08 A, Charge: 2.25202e-05 C
+Inductor: 1.90530e+00 V, 3.16192e-02 A, Energy: 9.99774e-06 J
+Capacitor: 1.90530e+00 V, 1.09091e+08 A, Charge: 5.71591e-05 C
+Inductor: 3.03132e+00 V, -2.48516e-02 A, Energy: 9.26401e-06 J
+
+========================================
+
+=== Test: Circuit 6: RLC Series and Parallel Mixed ===
+Calculated Tau (or 1/omega for LC): 0.0016666666665202782
+
+Time: 0.00000e+00 s (t=0)
+Total Current (from Battery): 2.00000e-01 A
+Battery: 10 V, -2.00000e-01 A
+Resistor: 1.00000e+01 V, 2.00000e-01 A
+Resistor: 1.81818e-09 V, 1.81818e-11 A
+Inductor: 1.81818e-09 V, 9.09091e-20 A, Energy: 4.13223e-41 J
+Capacitor: 1.81818e-09 V, 3.63636e-02 A, Charge: 1.81818e-14 C
+Resistor: 9.09091e-10 V, 4.54545e-12 A
+Inductor: 9.09091e-10 V, 2.27273e-20 A, Energy: 5.16529e-42 J
+Capacitor: 9.09091e-10 V, 3.63636e-02 A, Charge: 1.81818e-14 C
+Resistor: 2.72727e-09 V, 9.09091e-12 A
+Inductor: 2.72727e-09 V, 4.54545e-20 A, Energy: 3.09917e-41 J
+Capacitor: 2.72727e-09 V, 1.63636e-01 A, Charge: 8.18182e-14 C
+
+Time: 1.66667e-02 s (t=a lot relative to tau)
+Total Current (from Battery): 1.99545e-01 A
+Battery: 10 V, -1.99545e-01 A
+Resistor: 9.97723e+00 V, 1.99545e-01 A
+Resistor: 9.70333e-03 V, 9.70333e-05 A
+Inductor: 9.70333e-03 V, 9.98130e-02 A, Energy: 4.98132e-05 J
+Capacitor: 9.70333e-03 V, -3.01206e-05 A, Charge: 9.70333e-08 C
+Resistor: 1.30647e-02 V, 6.53233e-05 A
+Inductor: 1.30647e-02 V, 9.99765e-02 A, Energy: 9.99531e-05 J
+Capacitor: 1.30647e-02 V, -1.61920e-04 A, Charge: 2.61293e-07 C
+Resistor: 2.27680e-02 V, 7.58933e-05 A
+Inductor: 2.27680e-02 V, 9.99220e-02 A, Energy: 1.49766e-04 J
+Capacitor: 2.27680e-02 V, -3.33242e-04 A, Charge: 6.83040e-07 C
+
+========================================

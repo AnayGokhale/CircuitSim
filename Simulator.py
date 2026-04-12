@@ -28,11 +28,11 @@ BREADBOARD_COLOR = (255, 255, 255)
 HOLE_SIZE = 8
 HOLE_COLOR = (40, 40, 40)
 HOLE_SPACING = 20
-BG_COLOR = (230, 230, 235) # Light Grey
-PANEL_COLOR = (230, 230, 235)
-BUTTON_COLOR = (70, 130, 180)
-BUTTON_HOVER = (100, 160, 210)
-BUTTON_SELECTED = (50, 100, 150)
+BG_COLOR = (248, 249, 250) # Light Grey
+PANEL_COLOR = (255, 255, 255)
+BUTTON_COLOR = (59, 130, 246)
+BUTTON_HOVER = (96, 165, 250)
+BUTTON_SELECTED = (37, 99, 235)
 HOLE_HOVER_COLOR = (255, 200, 0)
 HOLE_SELECTED_COLOR = (0, 200, 100)
 
@@ -174,7 +174,7 @@ class NumericCounter:
 
     def bounds(self):
         # Return a rect that covers label + minus + value + plus, for outside-click detection
-        left = self.minus_rect.x - 150
+        left = self.minus_rect.x - 100
         top = self.rect.y
         right = self.plus_rect.right
         bottom = self.rect.bottom
@@ -405,10 +405,18 @@ class SidePanel:
                 charge = self.component.capacitance * self.component.voltage_drop
                 draw_text(f"Charge: {format_si(charge, 'C')}")
                 tau = self.simulator.current_tau
-                if tau:
-                    draw_text(f"\u03c4: {format_si(tau, 's')}")
+                has_lc = any(isinstance(c, Inductor) for c in self.simulator.components) and any(isinstance(c, Capacitor) for c in self.simulator.components)
+                if has_lc and tau:
+                    import math
+                    period = 2 * math.pi * tau
+                    freq = 1.0 / period
+                    draw_text(f"Period: {format_si(period, 's')}")
+                    draw_text(f"Frequency: {format_si(freq, 'Hz')}")
                 else:
-                    draw_text(f"\u03c4: Does not Exist")
+                    if tau:
+                        draw_text(f"\u03c4: {format_si(tau, 's')}")
+                    else:
+                        draw_text(f"\u03c4: Does not Exist")
 
         elif isinstance(self.component, Inductor):
             draw_text(f"Inductance: {format_si(self.component.inductance, 'H')}")
@@ -418,10 +426,18 @@ class SidePanel:
                 energy = 0.5 * self.component.inductance * self.component.current ** 2
                 draw_text(f"Energy: {format_si(energy, 'J')}")
                 tau = self.simulator.current_tau
-                if tau:
-                    draw_text(f"\u03c4: {format_si(tau, 's')}")
+                has_lc = any(isinstance(c, Inductor) for c in self.simulator.components) and any(isinstance(c, Capacitor) for c in self.simulator.components)
+                if has_lc and tau:
+                    import math
+                    period = 2 * math.pi * tau
+                    freq = 1.0 / period
+                    draw_text(f"Period: {format_si(period, 's')}")
+                    draw_text(f"Frequency: {format_si(freq, 'Hz')}")
                 else:
-                    draw_text(f"\u03c4: Does not Exist")
+                    if tau:
+                        draw_text(f"\u03c4: {format_si(tau, 's')}")
+                    else:
+                        draw_text(f"\u03c4: Does not Exist")
             
         elif isinstance(self.component, Battery):
             draw_text(f"Voltage: {format_si(self.component.voltage, 'V')}")
@@ -494,7 +510,7 @@ class SidePanel:
             for comp in getattr(self.component, 'connected_components', []):
                  draw_text(f"- {comp.name}", (100, 100, 100))
         
-        # Connection Nodes info (Debug mostly, but useful)
+        # Connection Nodes info
         y_offset += 10
         draw_text(f"Nodes: {self.component.node_id_1} <-> {self.component.node_id_2}", (150, 150, 150))
 
@@ -715,6 +731,10 @@ class BreadboardSimulator:
             self.draw_custom_resistor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
             return
 
+        if component.name == "Battery":
+            self.draw_custom_battery(component, start_pos, end_pos, mid_x, mid_y, angle, length)
+            return
+
         if component.name == "Capacitor":
             self.draw_custom_capacitor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
             return
@@ -750,6 +770,34 @@ class BreadboardSimulator:
         else:
             # Fallback drawing
             self.draw_fallback_component(component, mid_x, mid_y, angle, body_length)
+    def draw_custom_battery(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
+        dx = end_pos[0] - start_pos[0]
+        dy = end_pos[1] - start_pos[1]
+        correct_angle = math.degrees(math.atan2(-dy, dx))
+        body_length = 40
+        height = 16
+        
+        if length > body_length:
+            scale = (length - body_length) / 2 / length
+            lead1_end = (start_pos[0] + dx * scale, start_pos[1] + dy * scale)
+            lead2_start = (end_pos[0] - dx * scale, end_pos[1] - dy * scale)
+            pygame.draw.line(self.screen, (200, 50, 50), start_pos, lead1_end, 2)
+            pygame.draw.line(self.screen, (50, 50, 50), lead2_start, end_pos, 2)
+            
+        surf = pygame.Surface((body_length + 4, height), pygame.SRCALPHA)
+        
+        pygame.draw.rect(surf, (30, 30, 30), (0, 0, body_length, height), border_radius=2)
+        pygame.draw.rect(surf, (210, 160, 50), (body_length * 0.7, 0, body_length * 0.3, height), border_radius=2)
+        pygame.draw.rect(surf, (200, 200, 200), (body_length, height//2 - 3, 3, 6), border_radius=1)
+        
+        pygame.draw.line(surf, (0, 0, 0), (body_length - 6, height//2), (body_length - 2, height//2), 1)
+        pygame.draw.line(surf, (0, 0, 0), (body_length - 4, height//2 - 2), (body_length - 4, height//2 + 2), 1)
+        pygame.draw.line(surf, (255, 255, 255), (4, height//2), (8, height//2), 1)
+        
+        rotated_surf = pygame.transform.rotate(surf, correct_angle)
+        rect = rotated_surf.get_rect(center=(mid_x, mid_y))
+        self.screen.blit(rotated_surf, rect)
+
     def draw_custom_resistor(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
         dx = end_pos[0] - start_pos[0]
         dy = end_pos[1] - start_pos[1]
@@ -803,7 +851,7 @@ class BreadboardSimulator:
         pygame.draw.line(self.screen, (150, 150, 150), end_pos, (mid_x, mid_y), 2)
         
         cyl_w = 18
-        cyl_h = 28
+        cyl_h = 20
         ellipse_h = 8
         
         surf = pygame.Surface((cyl_w, cyl_h + ellipse_h), pygame.SRCALPHA)
@@ -840,57 +888,61 @@ class BreadboardSimulator:
         self.screen.blit(surf, target_rect.topleft)
 
     def draw_custom_inductor(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
-        # Draw leads from holes to the center
-        pygame.draw.line(self.screen, (150, 150, 150), start_pos, (mid_x, mid_y), 2)
-        pygame.draw.line(self.screen, (150, 150, 150), end_pos, (mid_x, mid_y), 2)
+        dx = end_pos[0] - start_pos[0]
+        dy = end_pos[1] - start_pos[1]
+        correct_angle = math.degrees(math.atan2(-dy, dx))
         
-        # Draw a toroidal inductor component (fixed size at center)
-        body_w = 30
-        body_h = 24
+        diam = 30
         
-        surf = pygame.Surface((body_w, body_h + 6), pygame.SRCALPHA)
-        
-        # Colors
-        core_color = (60, 80, 50)       # Dark green-brown ferrite core
-        core_light = (80, 110, 65)      # Lighter highlight
-        wire_color = (200, 140, 50)     # Copper wire color
-        wire_dark = (160, 100, 30)      # Darker copper for depth
-        
-        cx = body_w // 2
-        cy = body_h // 2 + 2
-        
-        # Draw the toroidal core body (flattened torus shape)
-        outer_rx = 13
-        outer_ry = 10
-        inner_rx = 6
-        inner_ry = 4
-        
-        # Outer ellipse (core body)
-        pygame.draw.ellipse(surf, core_color, (cx - outer_rx, cy - outer_ry, outer_rx * 2, outer_ry * 2))
-        pygame.draw.ellipse(surf, core_light, (cx - outer_rx + 2, cy - outer_ry + 1, outer_rx * 2 - 8, outer_ry * 2 - 6))
-        pygame.draw.ellipse(surf, core_color, (cx - outer_rx, cy - outer_ry, outer_rx * 2, outer_ry * 2), 2)
-        
-        # Inner hole of the toroid
-        pygame.draw.ellipse(surf, (0, 0, 0, 0), (cx - inner_rx, cy - inner_ry, inner_rx * 2, inner_ry * 2))
-        pygame.draw.ellipse(surf, (40, 40, 40), (cx - inner_rx, cy - inner_ry, inner_rx * 2, inner_ry * 2), 1)
-        
-        # Draw wire coils wrapping around the toroid
-        num_coils = 7
-        for i in range(num_coils):
-            coil_angle = -0.7 + (i / (num_coils - 1)) * 1.4
-            coil_x = int(cx + outer_rx * 0.85 * math.sin(coil_angle))
-            coil_y_top = int(cy - outer_ry + 1)
-            coil_y_bot = int(cy + outer_ry - 1)
+        if length > diam:
+            scale = (length - diam) / 2 / length
+            lead1_end = (start_pos[0] + dx * scale, start_pos[1] + dy * scale)
+            lead2_start = (end_pos[0] - dx * scale, end_pos[1] - dy * scale)
+            pygame.draw.line(self.screen, (150, 150, 150), start_pos, lead1_end, 2)
+            pygame.draw.line(self.screen, (150, 150, 150), lead2_start, end_pos, 2)
             
-            pygame.draw.line(surf, wire_dark, (coil_x, coil_y_top), (coil_x, coil_y_bot), 2)
-            pygame.draw.line(surf, wire_color, (coil_x - 1, coil_y_top), (coil_x - 1, coil_y_bot), 1)
+        surf = pygame.Surface((diam, diam), pygame.SRCALPHA)
+        cx, cy = diam // 2, diam // 2
         
-        # Connection dots at left and right
-        pygame.draw.circle(surf, wire_color, (2, cy), 2)
-        pygame.draw.circle(surf, wire_color, (body_w - 2, cy), 2)
+        # 3D core ring (black/dark grey)
+        thickness = diam // 3
+        outer_r = diam // 2
         
-        target_rect = surf.get_rect(center=(int(mid_x), int(mid_y)))
-        self.screen.blit(surf, target_rect.topleft)
+        pygame.draw.circle(surf, (30, 30, 35), (cx, cy), outer_r, width=thickness)
+        pygame.draw.circle(surf, (80, 80, 90), (cx, cy), outer_r, width=1) # Outer highlight
+        pygame.draw.circle(surf, (15, 15, 20), (cx, cy), outer_r - thickness + 1, width=1) # Inner shadow
+        
+        # 3D copper wire
+        wire_hl = (250, 170, 70)
+        wire_base = (200, 120, 30)
+        wire_sh = (100, 50, 10)
+        num_turns = 18
+        
+        for i in range(num_turns):
+            a = i * (2 * math.pi / num_turns)
+            r_in = outer_r - thickness
+            r_out = outer_r
+            
+            x1 = cx + math.cos(a) * (r_in - 1)
+            y1 = cy + math.sin(a) * (r_in - 1)
+            
+            # Midpoint for height/glint
+            x2 = cx + math.cos(a + 0.15) * (r_in + (r_out - r_in) * 0.5)
+            y2 = cy + math.sin(a + 0.15) * (r_in + (r_out - r_in) * 0.5)
+
+            x3 = cx + math.cos(a + 0.3) * (r_out + 1)
+            y3 = cy + math.sin(a + 0.3) * (r_out + 1)
+            
+            # Shadow/thickness
+            pygame.draw.line(surf, wire_sh, (x1, y1), (x3, y3), 4)
+            # Main wire color
+            pygame.draw.line(surf, wire_base, (x1, y1), (x3, y3), 2)
+            # Bright highlight in the center of the wire wrap
+            pygame.draw.circle(surf, wire_hl, (int(x2), int(y2)), 1)
+            
+        rotated_surf = pygame.transform.rotate(surf, correct_angle)
+        rect = rotated_surf.get_rect(center=(mid_x, mid_y))
+        self.screen.blit(rotated_surf, rect)
 
     def draw_custom_led(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
         pygame.draw.line(self.screen, (150, 150, 150), start_pos, (mid_x, mid_y), 2)
@@ -907,8 +959,8 @@ class BreadboardSimulator:
             actual_b = 0
             b = 0
             
-        body_w = 22
-        body_h = 24
+        body_w = 14
+        body_h = 16
         
         surf_w = 160
         surf_h = 160
@@ -1038,18 +1090,18 @@ class BreadboardSimulator:
         componentsList = [Wire, Battery, Resistor, Capacitor, Inductor, LED]
         component_text = ["Wire", "Battery", "Resistor", "Capacitor", "Inductor", "LED"]
         for i, comp in enumerate(component_text):
-            btn = Button(50 + i * 98, 30, 88, 45, comp, componentsList[i])
+            btn = Button(50 + i * 110, 30, 100, 45, comp, componentsList[i])
             if comp == self.active_component_txt:
                 btn.selected = True
             self.buttons.append(btn)
-        self.run_button = Button(650, 30, 80, 45, "Run", None)
+        self.run_button = Button(730, 30, 80, 45, "Run", None)
         
-        self.sim_back_button =  Button(650, 35, 40, 35, "", None, symbol='back10')
-        self.sim_pause_button = Button(695, 35, 40, 35, "", None, symbol='pause')
-        self.sim_fwd_button =   Button(740, 35, 40, 35, "", None, symbol='fwd10')
-        self.sim_reset_button = Button(785, 35, 40, 35, "", None, symbol='reset')
+        self.sim_back_button =  Button(730, 35, 40, 35, "", None, symbol='back10')
+        self.sim_pause_button = Button(775, 35, 40, 35, "", None, symbol='pause')
+        self.sim_fwd_button =   Button(820, 35, 40, 35, "", None, symbol='fwd10')
+        self.sim_reset_button = Button(865, 35, 40, 35, "", None, symbol='reset')
             
-        self.sim_time_widget = NumericCounter(980, 30, 80, 45, label="Time(s)", value=0.0, step=1.0, min_val=0.0, max_val=1e6)
+        self.sim_time_widget = NumericCounter(1050, 30, 80, 45, label="Time(s)", value=0.0, step=1.0, min_val=0.0, max_val=1e6)
         
         self.clear_button = Button(1100, 650, 80, 30, "Clear", None)
     

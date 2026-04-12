@@ -10,16 +10,24 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
     load_matrix = np.atleast_2d(load_matrix)
     source_matrix = np.atleast_2d(source_matrix)
 
+    has_lc = any(isinstance(c, Inductor) for c in components) and any(isinstance(c, Capacitor) for c in components)
+
     # Conductance Matrix
     G = np.zeros((len(loads), len(loads)))
     for i in range(len(loads)):
         for j in range(len(loads)):
             if i == j:
                 if loads[i].name == "Capacitor":
-                    G[i][j] = loads[i].capacitance / dt
+                    if has_lc:
+                        G[i][j] = 2 * loads[i].capacitance / dt
+                    else:
+                        G[i][j] = loads[i].capacitance / dt
                 elif loads[i].name == "Inductor":
                     if loads[i].inductance > 0:
-                        G[i][j] = dt / loads[i].inductance
+                        if has_lc:
+                            G[i][j] = dt / (2 * loads[i].inductance)
+                        else:
+                            G[i][j] = dt / loads[i].inductance
                     else:
                         G[i][j] = 1e9
                 else:
@@ -42,7 +50,10 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
             if component.name == "Capacitor":
-                Ieq = (component.capacitance / dt) * component._prev_voltage_drop
+                if has_lc:
+                    Ieq = (2 * component.capacitance / dt) * component._prev_voltage_drop + getattr(component, 'current', 0.0)
+                else:
+                    Ieq = (component.capacitance / dt) * component._prev_voltage_drop
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] += Ieq
@@ -50,7 +61,11 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                     idx2 = active_nodes.index(component.node_id_2)
                     Z[idx2] -= Ieq
             elif component.name == "Inductor":
-                Ieq = component._prev_current
+                if has_lc:
+                    prev_v = getattr(component, '_prev_voltage_drop_signed', 0.0)
+                    Ieq = component._prev_current + (dt / (2 * component.inductance)) * prev_v
+                else:
+                    Ieq = component._prev_current
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] -= Ieq
@@ -85,7 +100,10 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
             if component.name == "Capacitor":
-                Ieq = (component.capacitance / dt) * component._prev_voltage_drop
+                if has_lc:
+                    Ieq = (2 * component.capacitance / dt) * component._prev_voltage_drop + getattr(component, 'current', 0.0)
+                else:
+                    Ieq = (component.capacitance / dt) * component._prev_voltage_drop
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] += Ieq
@@ -93,7 +111,11 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                     idx2 = active_nodes.index(component.node_id_2)
                     Z[idx2] -= Ieq
             elif component.name == "Inductor":
-                Ieq = component._prev_current
+                if has_lc:
+                    prev_v = getattr(component, '_prev_voltage_drop_signed', 0.0)
+                    Ieq = component._prev_current + (dt / (2 * component.inductance)) * prev_v
+                else:
+                    Ieq = component._prev_current
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] -= Ieq
@@ -142,14 +164,23 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
             
             if isinstance(component, Capacitor):
                 V_old = component._prev_voltage_drop
-                G_eq = component.capacitance / dt
-                component.current = G_eq * (v_drop - V_old)
+                if has_lc:
+                    G_eq = 2 * component.capacitance / dt
+                    component.current = G_eq * (v_drop - V_old) - getattr(component, 'current', 0.0)
+                else:
+                    G_eq = component.capacitance / dt
+                    component.current = G_eq * (v_drop - V_old)
                 component.voltage_drop = abs(v_drop)
                 component._prev_voltage_drop = v_drop
             elif isinstance(component, Inductor):
-                G_eq = dt / component.inductance if component.inductance > 0 else 1e9
-                component.current = G_eq * v_drop + component._prev_current
+                if has_lc:
+                    G_eq = dt / (2 * component.inductance) if component.inductance > 0 else 1e9
+                    component.current = G_eq * v_drop + component._prev_current + G_eq * getattr(component, '_prev_voltage_drop_signed', 0.0)
+                else:
+                    G_eq = dt / component.inductance if component.inductance > 0 else 1e9
+                    component.current = G_eq * v_drop + component._prev_current
                 component.voltage_drop = abs(v_drop)
+                component._prev_voltage_drop_signed = v_drop
                 component._prev_current = component.current
             else:
                 component.voltage_drop = abs(v_drop)
@@ -281,8 +312,9 @@ def calculate_time_constant(components):
                 taus.append(tau)
         except np.linalg.LinAlgError:
             pass
-
-    #For each capacitor GROUP, compute tau with all other groups SHORTED
+    
+    #Thevenin equivalent
+    #For each capacitor group, compute tau with all other groups shorted
     group_keys = list(cap_groups.keys())
     for gidx, group_key in enumerate(group_keys):
         ci = all_nodes.index(group_key[0])
@@ -293,7 +325,7 @@ def calculate_time_constant(components):
         C_total = sum(c.capacitance for c in cap_groups[group_key])
 
         Y_cap = np.copy(Y)
-        # Short all OTHER groups
+        # Short all other groups
         for oidx, other_key in enumerate(group_keys):
             if oidx == gidx:
                 continue
@@ -352,7 +384,7 @@ def calculate_time_constant(components):
         for k, ind in enumerate(inductors):
             M_desc[n+k, n+k] = ind.inductance
             
-        # N_desc top-left is Y matrix (already computed as Y)
+        # N_desc top-left is Y matrix
         N_desc[:n, :n] = Y
         
         # N_desc top-right is A_L and bottom-left is -A_L^T
@@ -372,7 +404,6 @@ def calculate_time_constant(components):
         M_eig = np.delete(np.delete(M_desc, ref, axis=0), ref, axis=1)
         N_eig = np.delete(np.delete(N_desc, ref, axis=0), ref, axis=1)
         
-        # General regularization for numerical stability
         for i in range(len(N_eig)):
             N_eig[i][i] += 1e-12
         
