@@ -174,7 +174,7 @@ def calculate_brightness(led_component):
     # Brightness as percentage of max power
     percentage = (power / MAX_POWER) * 100
     
-    return max(0.0, min(100.0, percentage))
+    return max(0.0, percentage)
 
 def generate_incidence_matrix(components, active_nodes):
     incidence_matrix = np.zeros((len(components), len(active_nodes)))

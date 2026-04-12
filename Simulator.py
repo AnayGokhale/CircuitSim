@@ -439,12 +439,15 @@ class SidePanel:
                 
                 # Brightness 
                 b_val = getattr(self.component, 'brightness', 0)
-                draw_text(f"Brightness: {b_val:.1f}%")
+                if b_val <= 100:
+                    draw_text(f"Brightness: {b_val:.1f}%")
+                else:
+                    draw_text(f"Brightness: {b_val:.1f}% (BURNOUT)", (255, 0, 0))
                 
                 # Draw a purity bar for brightness
                 bar_rect = pygame.Rect(self.rect.x + 20, self.rect.y + y_offset, self.rect.width - 40, 10)
                 pygame.draw.rect(surface, (50, 50, 50), bar_rect)
-                fill_width = (b_val / 100.0) * (self.rect.width - 40)
+                fill_width = (min(b_val, 100) / 100.0) * (self.rect.width - 40)
                 
                 # Use LED color for the bar
                 c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
@@ -720,6 +723,10 @@ class BreadboardSimulator:
             self.draw_custom_inductor(component, start_pos, end_pos, mid_x, mid_y, angle, length)
             return
 
+        if component.name == "LED":
+            self.draw_custom_led(component, start_pos, end_pos, mid_x, mid_y, angle, length)
+            return
+
         body_length = 40
         if length > body_length:
             scale = (length - body_length) / 2 / length
@@ -883,6 +890,91 @@ class BreadboardSimulator:
         pygame.draw.circle(surf, wire_color, (body_w - 2, cy), 2)
         
         target_rect = surf.get_rect(center=(int(mid_x), int(mid_y)))
+        self.screen.blit(surf, target_rect.topleft)
+
+    def draw_custom_led(self, component, start_pos, end_pos, mid_x, mid_y, angle, length):
+        pygame.draw.line(self.screen, (150, 150, 150), start_pos, (mid_x, mid_y), 2)
+        pygame.draw.line(self.screen, (150, 150, 150), end_pos, (mid_x, mid_y), 2)
+        
+        c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
+                 "yellow": (255, 255, 0), "white": (255, 255, 255)}
+        led_c = c_map.get(getattr(component, 'color', 'red'), (255, 0, 0))
+        
+        if self.is_simulating or self.sim_paused:
+            actual_b = getattr(component, 'brightness', 0)
+            b = min(actual_b, 100)
+        else:
+            actual_b = 0
+            b = 0
+            
+        body_w = 22
+        body_h = 24
+        
+        surf_w = 160
+        surf_h = 160
+        surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+        cx = surf_w // 2
+        cy = surf_h - 20
+        
+        # Base/collar at the bottom
+        pygame.draw.rect(surf, (100, 100, 100), (cx - body_w//2 - 2, cy - 4, body_w + 4, 4), border_radius=2)
+        pygame.draw.rect(surf, (60, 60, 60), (cx - body_w//2 - 2, cy, body_w + 4, 2), border_radius=1)
+        
+        body_rect = pygame.Rect(cx - body_w//2, cy - body_h, body_w, body_h)
+        base_c = (max(40, int(led_c[0]*0.2)), max(40, int(led_c[1]*0.2)), max(40, int(led_c[2]*0.2)))
+        
+        if actual_b <= 100.1:
+            if b > 0:
+                bright_c = (
+                    min(255, int(base_c[0] + (led_c[0] * 1.5 - base_c[0]) * (b / 100.0))),
+                    min(255, int(base_c[1] + (led_c[1] * 1.5 - base_c[1]) * (b / 100.0))),
+                    min(255, int(base_c[2] + (led_c[2] * 1.5 - base_c[2]) * (b / 100.0)))
+                )
+            else:
+                bright_c = base_c
+                
+            pygame.draw.rect(surf, bright_c, body_rect)
+            pygame.draw.circle(surf, bright_c, (cx, cy - body_h), body_w//2)
+            
+            if b > 0:
+                glow_radius_max = int(body_w + (b / 100.0) * 55)
+                glow_y = cy - body_h + body_w//4
+                glow_surf = pygame.Surface((surf_w, surf_h), pygame.SRCALPHA)
+                
+                for r in range(glow_radius_max, body_w//2, -3):
+                    ratio = (glow_radius_max - r) / glow_radius_max
+                    alpha = int((ratio ** 1.3) * (b / 100.0) * 180)
+                    if alpha > 255: alpha = 255
+                    
+                    whiteness = ratio * 0.4
+                    g_c = (
+                        min(255, int(led_c[0] + (255 - led_c[0]) * whiteness)),
+                        min(255, int(led_c[1] + (255 - led_c[1]) * whiteness)),
+                        min(255, int(led_c[2] + (255 - led_c[2]) * whiteness)),
+                        alpha
+                    )
+                    pygame.draw.circle(glow_surf, g_c, (cx, glow_y), r)
+                
+                surf.blit(glow_surf, (0, 0))
+                
+                if b >= 95:
+                    core_rect = pygame.Rect(cx - body_w//4, cy - body_h//1.5, body_w//2, body_h//2)
+                    pygame.draw.rect(surf, (255, 255, 255), core_rect)
+                    pygame.draw.circle(surf, (255, 255, 255), (cx, cy - body_h//1.5), body_w//4)
+
+            # Specular highlight
+            hl_rect = pygame.Rect(cx - body_w//2 + 3, cy - body_h + 2, body_w//3 - 2, body_h - body_w//2)
+            pygame.draw.rect(surf, (255, 255, 255, 120), hl_rect, border_radius=2)
+            pygame.draw.circle(surf, (255, 255, 255, 120), (cx - body_w//4, cy - body_h + 2), body_w//4 - 2)
+
+        else:
+            char_c = (40, 40, 45)
+            pygame.draw.rect(surf, char_c, body_rect)
+            pygame.draw.circle(surf, char_c, (cx, cy - body_h), body_w//2)
+            pygame.draw.line(surf, (0, 0, 0), (cx - body_w//2, cy - body_h), (cx + body_w//4, cy - body_h//3), 2)
+            pygame.draw.line(surf, (0, 0, 0), (cx + body_w//4, cy - body_h//3), (cx - body_w//4, cy - body_h//4), 1)
+
+        target_rect = surf.get_rect(midbottom=(int(mid_x), int(mid_y + 20)))
         self.screen.blit(surf, target_rect.topleft)
 
     def draw_fallback_component(self, component, x, y, angle, length):
