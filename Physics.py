@@ -1,6 +1,6 @@
-from Components import Wire, Battery, Resistor, Capacitor, Inductor, LED
 import numpy as np
-from scipy.linalg import null_space
+from Components import Wire, Battery, Resistor, Capacitor, Inductor, LED
+
 
 def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0):
     loads = [component for component in components if component.name != "Battery"]
@@ -10,24 +10,16 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
     load_matrix = np.atleast_2d(load_matrix)
     source_matrix = np.atleast_2d(source_matrix)
 
-    has_lc = any(isinstance(c, Inductor) for c in components) and any(isinstance(c, Capacitor) for c in components)
-
     # Conductance Matrix
     G = np.zeros((len(loads), len(loads)))
     for i in range(len(loads)):
         for j in range(len(loads)):
             if i == j:
                 if loads[i].name == "Capacitor":
-                    if has_lc:
-                        G[i][j] = 2 * loads[i].capacitance / dt
-                    else:
-                        G[i][j] = loads[i].capacitance / dt
+                    G[i][j] = 2 * loads[i].capacitance / dt
                 elif loads[i].name == "Inductor":
                     if loads[i].inductance > 0:
-                        if has_lc:
-                            G[i][j] = dt / (2 * loads[i].inductance)
-                        else:
-                            G[i][j] = dt / loads[i].inductance
+                        G[i][j] = dt / (2 * loads[i].inductance)
                     else:
                         G[i][j] = 1e9
                 else:
@@ -37,7 +29,7 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                         G[i][j] = 1e9  # Very high conductance for 0 resistance to avoid singular matrices
     
     # Infintely small conductance to avoid singular matrices
-    GMIN = 1e-12
+    GMIN = 1e-15
     # Z Vector
     Z = np.zeros(len(active_nodes) + len(sources))
         
@@ -45,15 +37,13 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         # Battery-less circuit Support (RC Discharge)
         Master = load_matrix.T @ G @ load_matrix
         for i in range(len(active_nodes)):
-            Master[i][i] += GMIN
+            if Master[i][i] == 0:
+                Master[i][i] += GMIN
             
         # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
             if component.name == "Capacitor":
-                if has_lc:
-                    Ieq = (2 * component.capacitance / dt) * component._prev_voltage_drop + getattr(component, 'current', 0.0)
-                else:
-                    Ieq = (component.capacitance / dt) * component._prev_voltage_drop
+                Ieq = (2 * component.capacitance / dt) * component._prev_voltage_drop + getattr(component, 'current', 0.0)
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] += Ieq
@@ -61,11 +51,8 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                     idx2 = active_nodes.index(component.node_id_2)
                     Z[idx2] -= Ieq
             elif component.name == "Inductor":
-                if has_lc:
-                    prev_v = getattr(component, '_prev_voltage_drop_signed', 0.0)
-                    Ieq = component._prev_current + (dt / (2 * component.inductance)) * prev_v
-                else:
-                    Ieq = component._prev_current
+                prev_v = getattr(component, '_prev_voltage_drop_signed', 0.0)
+                Ieq = component._prev_current + (dt / (2 * component.inductance)) * prev_v
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] -= Ieq
@@ -95,15 +82,13 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         ])
         
         for i in range(len(active_nodes)):
-            Master[i][i] += GMIN
+            if Master[i][i] == 0:
+                Master[i][i] += GMIN
 
         # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
             if component.name == "Capacitor":
-                if has_lc:
-                    Ieq = (2 * component.capacitance / dt) * component._prev_voltage_drop + getattr(component, 'current', 0.0)
-                else:
-                    Ieq = (component.capacitance / dt) * component._prev_voltage_drop
+                Ieq = (2 * component.capacitance / dt) * component._prev_voltage_drop + getattr(component, 'current', 0.0)
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] += Ieq
@@ -111,11 +96,8 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                     idx2 = active_nodes.index(component.node_id_2)
                     Z[idx2] -= Ieq
             elif component.name == "Inductor":
-                if has_lc:
-                    prev_v = getattr(component, '_prev_voltage_drop_signed', 0.0)
-                    Ieq = component._prev_current + (dt / (2 * component.inductance)) * prev_v
-                else:
-                    Ieq = component._prev_current
+                prev_v = getattr(component, '_prev_voltage_drop_signed', 0.0)
+                Ieq = component._prev_current + (dt / (2 * component.inductance)) * prev_v
                 if component.node_id_1 in active_nodes:
                     idx1 = active_nodes.index(component.node_id_1)
                     Z[idx1] -= Ieq
@@ -164,28 +146,20 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
             
             if isinstance(component, Capacitor):
                 V_old = component._prev_voltage_drop
-                if has_lc:
-                    G_eq = 2 * component.capacitance / dt
-                    component.current = G_eq * (v_drop - V_old) - getattr(component, 'current', 0.0)
-                else:
-                    G_eq = component.capacitance / dt
-                    component.current = G_eq * (v_drop - V_old)
-                component.voltage_drop = abs(v_drop)
+                G_eq = 2 * component.capacitance / dt
+                component.current = G_eq * (v_drop - V_old) - getattr(component, 'current', 0.0)
+                component.voltage_drop = v_drop
                 component._prev_voltage_drop = v_drop
             elif isinstance(component, Inductor):
-                if has_lc:
-                    G_eq = dt / (2 * component.inductance) if component.inductance > 0 else 1e9
-                    component.current = G_eq * v_drop + component._prev_current + G_eq * getattr(component, '_prev_voltage_drop_signed', 0.0)
-                else:
-                    G_eq = dt / component.inductance if component.inductance > 0 else 1e9
-                    component.current = G_eq * v_drop + component._prev_current
-                component.voltage_drop = abs(v_drop)
+                G_eq = dt / (2 * component.inductance) if component.inductance > 0 else 1e9
+                component.current = G_eq * v_drop + component._prev_current + G_eq * getattr(component, '_prev_voltage_drop_signed', 0.0)
+                component.voltage_drop = v_drop
                 component._prev_voltage_drop_signed = v_drop
                 component._prev_current = component.current
             else:
-                component.voltage_drop = abs(v_drop)
+                component.voltage_drop = v_drop
                 if component.resistance > 0:
-                    component.current = component.voltage_drop / component.resistance
+                    component.current = v_drop / component.resistance
                 else:
                     component.current = 0
             
@@ -359,8 +333,6 @@ def calculate_time_constant(components):
             pass
 
     try:
-        from scipy.linalg import eig
-
         num_v = n
         num_i = len(inductors)
         size = num_v + num_i
@@ -404,17 +376,25 @@ def calculate_time_constant(components):
         M_eig = np.delete(np.delete(M_desc, ref, axis=0), ref, axis=1)
         N_eig = np.delete(np.delete(N_desc, ref, axis=0), ref, axis=1)
         
+        for i in range(len(M_eig)):
+            if M_eig[i][i] == 0:
+                M_eig[i][i] = 1e-15
+                
         for i in range(len(N_eig)):
-            N_eig[i][i] += 1e-12
+            if N_eig[i][i] == 0:
+                N_eig[i][i] += 1e-12
         
         # Solve generalized eigenvalue problem: N·X = λ·M·X
-        eigenvalues, _ = eig(N_eig, M_eig)
+        eigenvalues, _ = np.linalg.eig(np.linalg.solve(M_eig, N_eig))
         
         for ev in eigenvalues:
             if np.isfinite(ev) and abs(ev) > 1e-8:
-                tau_ev = 1.0 / abs(ev)
-                if tau_ev > 1e-12 and tau_ev < 1e5:
-                    taus.append(tau_ev)
+                # Use damped frequency Im(lambda) if oscillating, else real eigenvalue
+                omega = abs(ev.imag) if abs(ev.imag) > 1e-8 else abs(ev.real)
+                if omega > 1e-8:
+                    tau_ev = 1.0 / omega
+                    if tau_ev > 1e-12 and tau_ev < 1e5:
+                        taus.append(tau_ev)
     except Exception:
         pass
             
