@@ -243,7 +243,7 @@ class NumericCounter:
                 self.text = f"{self.value:.2f}".rstrip('0').rstrip('.')
 
         elif event.type == pygame.KEYDOWN and self.active:
-            if event.key == pygame.K_RETURN:
+            if event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
                 try:
                     val = float(self.text)
                     self.value = min(self.max_val, max(self.min_val, val))
@@ -255,8 +255,22 @@ class NumericCounter:
             elif event.key == pygame.K_BACKSPACE:
                 self.text = self.text[:-1]
             else:
-                if event.unicode.isdigit() or (event.unicode == '.' and '.' not in self.text) or (event.unicode == '-' and '-' not in self.text and len(self.text) == 0):
-                    self.text += event.unicode
+                char = event.unicode
+                if event.key == pygame.K_KP0: char = '0'
+                elif event.key == pygame.K_KP1: char = '1'
+                elif event.key == pygame.K_KP2: char = '2'
+                elif event.key == pygame.K_KP3: char = '3'
+                elif event.key == pygame.K_KP4: char = '4'
+                elif event.key == pygame.K_KP5: char = '5'
+                elif event.key == pygame.K_KP6: char = '6'
+                elif event.key == pygame.K_KP7: char = '7'
+                elif event.key == pygame.K_KP8: char = '8'
+                elif event.key == pygame.K_KP9: char = '9'
+                elif event.key == pygame.K_KP_PERIOD: char = '.'
+                elif event.key == pygame.K_KP_MINUS: char = '-'
+                
+                if char.isdigit() or (char == '.' and '.' not in self.text) or (char == '-' and '-' not in self.text and len(self.text) == 0):
+                    self.text += char
         return None
 
 class Dropdown:
@@ -462,7 +476,7 @@ class SidePanel:
             
         elif isinstance(self.component, LED):
             c_map_rev = {v: k for k, v in {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
-                     "yellow": (255, 255, 0), "white": (255, 255, 255)}.items()}
+                     "orange": (255, 165, 0)}.items()}
             # self.component.color is a string name
             draw_text(f"Color: {self.component.color}")
             if self.simulator.is_simulating or self.simulator.sim_paused:
@@ -483,7 +497,7 @@ class SidePanel:
                 
                 # Use LED color for the bar
                 c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
-                         "yellow": (255, 255, 0), "white": (255, 255, 255)}
+                         "orange": (255, 165, 0)}
                 bar_color = c_map.get(self.component.color, (255, 255, 255))
                 
                 if fill_width > 0:
@@ -979,7 +993,7 @@ class BreadboardSimulator:
         pygame.draw.line(self.screen, (150, 150, 150), end_pos, (mid_x, mid_y), 2)
         
         c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
-                 "yellow": (255, 255, 0), "white": (255, 255, 255)}
+                 "orange": (255, 165, 0)}
         led_c = c_map.get(getattr(component, 'color', 'red'), (255, 0, 0))
         
         if self.is_simulating or self.sim_paused:
@@ -1100,7 +1114,7 @@ class BreadboardSimulator:
 
         elif component.name == "LED":
             c_map = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255), 
-                     "yellow": (255, 255, 0), "white": (255, 255, 255)}
+                     "orange": (255, 165, 0)}
             led_c = c_map.get(getattr(component, 'color', 'red'), (255, 0, 0))
             label = ""
             pygame.draw.ellipse(surf, led_c, (5, 0, length-10, 20))
@@ -1193,7 +1207,7 @@ class BreadboardSimulator:
             # Create dropdown for LED color
             default_val = self.component_defaults.get("LED", "red")
             widget = Dropdown(anchor_x + 80, anchor_y, 100, 30,
-                              label="Color", options=["red","green","blue","yellow","white"], default=default_val)
+                              label="Color", options=["red","green","blue","orange"], default=default_val)
             widget.set_position(anchor_x + 80, anchor_y)
             self.param_widget = widget
             self.param_for = "LED"
