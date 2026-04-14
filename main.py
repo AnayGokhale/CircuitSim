@@ -104,9 +104,11 @@ class Button:
         self.selected = False
         self.symbol = symbol
         
-    def draw(self, surface, font):
+    def draw(self, surface, font, mouse_pos=None):
+        if mouse_pos is None:
+            mouse_pos = pygame.mouse.get_pos()
         color = BUTTON_SELECTED if self.selected else BUTTON_COLOR
-        if not self.selected and self.rect.collidepoint(pygame.mouse.get_pos()):
+        if not self.selected and self.rect.collidepoint(mouse_pos):
             color = BUTTON_HOVER
             
         pygame.draw.rect(surface, color, self.rect, border_radius=5)
@@ -192,7 +194,7 @@ class NumericCounter:
         bottom = self.rect.bottom
         return pygame.Rect(left, top, right - left, bottom - top)
 
-    def draw(self, surface, font):
+    def draw(self, surface, font, mouse_pos=None):
         label_surf = font.render(self.label, True, (0,0,0))
         label_y = self.rect.centery - label_surf.get_height() // 2
         label_x = self.minus_rect.left - 15 - label_surf.get_width()
@@ -278,7 +280,7 @@ class Dropdown:
         height = self.rect.height * (1 + (len(self.options) if self.expanded else 0))
         return pygame.Rect(self.rect.x, self.rect.y, self.rect.width, height)
 
-    def draw(self, surface, font):
+    def draw(self, surface, font, mouse_pos=None):
         # Label
         label_surf = font.render(self.label, True, (0,0,0))
         surface.blit(label_surf, (self.rect.x - 80, self.rect.y + 5))
@@ -322,7 +324,9 @@ class UnitDropdown(Dropdown):
     def __init__(self, x, y, width, height, options, default):
         super().__init__(x, y, width, height, "", options, default)
         
-    def draw(self, surface, font):
+    def draw(self, surface, font, mouse_pos=None):
+        if mouse_pos is None:
+            mouse_pos = pygame.mouse.get_pos()
         # Main box
         pygame.draw.rect(surface, (210,210,210), self.rect, border_radius=4)
         text_surf = font.render(str(self.selected_option), True, (0,0,0))
@@ -332,7 +336,7 @@ class UnitDropdown(Dropdown):
             for i, opt in enumerate(self.options):
                 opt_rect = self.option_rect(i)
                 pygame.draw.rect(surface, (200,200,200), opt_rect)
-                if opt_rect.collidepoint(pygame.mouse.get_pos()):
+                if opt_rect.collidepoint(mouse_pos):
                     pygame.draw.rect(surface, (180,180,180), opt_rect)
                 opt_surf = font.render(str(opt), True, (0,0,0))
                 surface.blit(opt_surf, opt_surf.get_rect(center=opt_rect.center))
@@ -1315,26 +1319,27 @@ class BreadboardSimulator:
             self.draw_component(component)
         for merger in self.mergers:
             self.draw_component(merger)
+        m_pos = self.get_internal_pos(pygame.mouse.get_pos())
         # Draw buttons
         for btn in self.buttons:
-            btn.draw(self.screen, self.font)
+            btn.draw(self.screen, self.font, m_pos)
             
         if not self.is_simulating:
-            self.run_button.draw(self.screen, self.font)
+            self.run_button.draw(self.screen, self.font, m_pos)
         else:
-            self.sim_back_button.draw(self.screen, self.font)
+            self.sim_back_button.draw(self.screen, self.font, m_pos)
             self.sim_pause_button.symbol = 'play' if self.sim_paused else 'pause'
-            self.sim_pause_button.draw(self.screen, self.font)
-            self.sim_fwd_button.draw(self.screen, self.font)
-            self.sim_reset_button.draw(self.screen, self.font)
+            self.sim_pause_button.draw(self.screen, self.font, m_pos)
+            self.sim_fwd_button.draw(self.screen, self.font, m_pos)
+            self.sim_reset_button.draw(self.screen, self.font, m_pos)
         if self.sim_time_widget:
-            self.sim_time_widget.draw(self.screen, self.font)
+            self.sim_time_widget.draw(self.screen, self.font, m_pos)
         
         # Draw Side Panel
         if self.side_panel.visible:
             self.side_panel.draw(self.screen)
             
-        self.clear_button.draw(self.screen, self.small_font)
+        self.clear_button.draw(self.screen, self.small_font, m_pos)
         
     def handle_click(self, pos, button=1):
         # Right click for selection
@@ -1746,10 +1751,11 @@ class BreadboardSimulator:
             
             # Draw UI            
             self.draw_breadboard()
+            m_pos = self.get_internal_pos(pygame.mouse.get_pos())
             if self.param_widget:
-                self.param_widget.draw(self.screen, self.font)
+                self.param_widget.draw(self.screen, self.font, m_pos)
             if self.param_unit_widget:
-                self.param_unit_widget.draw(self.screen, self.font)
+                self.param_unit_widget.draw(self.screen, self.font, m_pos)
 
             # Scale and blit to window
                         # Scale with aspect ratio preserved, letterboxing if needed
