@@ -600,6 +600,7 @@ class BreadboardSimulator:
             "Resistance": 0.0,
             "Power": 0.0
         }
+        self.history = []
         
         # Persistent defaults
         self.component_defaults = {
@@ -677,6 +678,8 @@ class BreadboardSimulator:
         if not self.selected_component:
             return
 
+        self.save_state()
+
         comp = self.selected_component
         
         # Free holes
@@ -704,6 +707,30 @@ class BreadboardSimulator:
             if h.row == r and h.col == c:
                 return h
         return None
+
+    def save_state(self):
+        import copy
+        state = {
+            'board': copy.deepcopy((self.components, self.mergers)),
+            'holes_occupied': [h.occupied for h in self.holes]
+        }
+        if len(self.history) >= 10:
+            self.history.pop(0)
+        self.history.append(state)
+
+    def undo(self):
+        if self.history:
+            state = self.history.pop()
+            self.components, self.mergers = state['board']
+            for i, occ in enumerate(state['holes_occupied']):
+                self.holes[i].occupied = occ
+            
+            self.first_hole = None
+            self.selected_component = None
+            self.side_panel.visible = False
+            self.side_panel.component = None
+            
+            self.rebuild_circuit()
 
     def rebuild_circuit(self):
         self.init_node_system()
@@ -1147,7 +1174,9 @@ class BreadboardSimulator:
             
         self.sim_time_widget = NumericCounter(1050, 30, 80, 45, label="Time(s)", value=0.0, step=1.0, min_val=0.0, max_val=1e6)
         
-        self.clear_button = Button(1100, 650, 80, 30, "Clear", None)
+        self.clear_button = Button(1110, 650, 70, 30, "Clear", None)
+        self.undo_button = Button(1030, 650, 70, 30, "Undo", None)
+        self.delete_button = Button(950, 650, 70, 30, "Delete", None)
     
     def open_param_widget_for(self, btn):
         anchor_x = btn.rect.x
@@ -1354,27 +1383,27 @@ class BreadboardSimulator:
             self.side_panel.draw(self.screen)
             
         self.clear_button.draw(self.screen, self.small_font, m_pos)
+        self.undo_button.draw(self.screen, self.small_font, m_pos)
+        if self.selected_component:
+            self.delete_button.draw(self.screen, self.small_font, m_pos)
         
     def handle_click(self, pos, button=1):
-        # Right click for selection
-        if button == 3:
-            # Try to find component
-            item = self.get_component_at_pos(pos)
+        def do_select(item):
             if item:
                 self.selected_component = item
-                # Deselect buttons if we selected a component
                 for b in self.buttons: b.selected = False
                 self.active_component_txt = "Selection"
-                
-                # Update Side Panel
                 if isinstance(item, Wire):
-                    # Find connected components
                     item.connected_components = self.get_connected_components(item)
-                
                 self.side_panel.set_component(item)
             else:
                 self.selected_component = None
                 self.side_panel.visible = False
+
+        # Right click for selection
+        if button == 3:
+            item = self.get_component_at_pos(pos)
+            do_select(item)
             return
 
         if self.param_widget:
@@ -1408,6 +1437,8 @@ class BreadboardSimulator:
 
 
         if self.clear_button.rect.collidepoint(pos):
+            if self.components or self.mergers:
+                self.save_state()
             self.components.clear()
             self.mergers.clear()
             for h in self.holes:
@@ -1426,6 +1457,14 @@ class BreadboardSimulator:
                     self.sim_time_widget.text = "0.0"
                     
             self.rebuild_circuit()
+            return
+
+        if self.undo_button.rect.collidepoint(pos):
+            self.undo()
+            return
+
+        if self.selected_component and self.delete_button.rect.collidepoint(pos):
+            self.delete_selected_component()
             return
 
         # Check buttons
@@ -1517,6 +1556,8 @@ class BreadboardSimulator:
                     if hole == self.first_hole:
                         return
                         
+                    self.save_state()
+                    
                     self.active_component.node1 = (self.first_hole.row, self.first_hole.col)
                     self.active_component.node2 = (hole.row, hole.col)
                     self.active_component.node_id_2 = hole.node_id
@@ -1559,6 +1600,14 @@ class BreadboardSimulator:
                     
                     self.first_hole = None
                 return 
+
+        # If we didn't hit a hole or button, and it's a left click, check for component
+        # This gives mobile parity for component selection, and a nice alternative on desktop
+        if button == 1:
+            item = self.get_component_at_pos(pos)
+            if item:
+                do_select(item)
+
     def update_active_component_param(self, value):
         multiplier = 1.0
         u = ""
