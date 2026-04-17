@@ -714,7 +714,7 @@ class BreadboardSimulator:
             'board': copy.deepcopy((self.components, self.mergers)),
             'holes_occupied': [h.occupied for h in self.holes]
         }
-        if len(self.history) >= 10:
+        if len(self.history) >= 20:
             self.history.pop(0)
         self.history.append(state)
 
@@ -1176,7 +1176,6 @@ class BreadboardSimulator:
         
         self.clear_button = Button(1110, 650, 70, 30, "Clear", None)
         self.undo_button = Button(1030, 650, 70, 30, "Undo", None)
-        self.delete_button = Button(950, 650, 70, 30, "Delete", None)
     
     def open_param_widget_for(self, btn):
         anchor_x = btn.rect.x
@@ -1384,8 +1383,6 @@ class BreadboardSimulator:
             
         self.clear_button.draw(self.screen, self.small_font, m_pos)
         self.undo_button.draw(self.screen, self.small_font, m_pos)
-        if self.selected_component:
-            self.delete_button.draw(self.screen, self.small_font, m_pos)
         
     def handle_click(self, pos, button=1):
         def do_select(item):
@@ -1461,10 +1458,6 @@ class BreadboardSimulator:
 
         if self.undo_button.rect.collidepoint(pos):
             self.undo()
-            return
-
-        if self.selected_component and self.delete_button.rect.collidepoint(pos):
-            self.delete_selected_component()
             return
 
         # Check buttons
@@ -1600,13 +1593,6 @@ class BreadboardSimulator:
                     
                     self.first_hole = None
                 return 
-
-        # If we didn't hit a hole or button, and it's a left click, check for component
-        # This gives mobile parity for component selection, and a nice alternative on desktop
-        if button == 1:
-            item = self.get_component_at_pos(pos)
-            if item:
-                do_select(item)
 
     def update_active_component_param(self, value):
         multiplier = 1.0

@@ -29,7 +29,7 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
                         G[i][j] = 1e9  # Very high conductance for 0 resistance to avoid singular matrices
     
     # Infintely small conductance to avoid singular matrices
-    GMIN = 1e-15
+    GMIN = 1e-12
     # Z Vector
     Z = np.zeros(len(active_nodes) + len(sources))
         
@@ -37,8 +37,7 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         # Battery-less circuit Support (RC Discharge)
         Master = load_matrix.T @ G @ load_matrix
         for i in range(len(active_nodes)):
-            if Master[i][i] == 0:
-                Master[i][i] += GMIN
+            Master[i][i] += GMIN
             
         # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
@@ -68,6 +67,8 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         
         try:
             voltages_reduced = np.linalg.solve(M_reduced, Z_reduced)
+            if np.isnan(voltages_reduced).any():
+                voltages_reduced = np.zeros(len(active_nodes) - 1)
         except np.linalg.LinAlgError:
             voltages_reduced = np.zeros(len(active_nodes) - 1)
             
@@ -82,8 +83,7 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         ])
         
         for i in range(len(active_nodes)):
-            if Master[i][i] == 0:
-                Master[i][i] += GMIN
+            Master[i][i] += GMIN
 
         # Add historical current from capacitors and inductors
         for i, component in enumerate(components):
@@ -121,6 +121,8 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
         # Solve for Voltages
         try:
             x = np.linalg.solve(M_reduced, Z_reduced)
+            if np.isnan(x).any():
+                x = np.zeros(len(M_reduced))
         except np.linalg.LinAlgError:
             x = np.zeros(len(M_reduced))
             
@@ -185,6 +187,8 @@ def generate_incidence_matrix(components, active_nodes):
     incidence_matrix = np.zeros((len(components), len(active_nodes)))
     for i, component in enumerate(components):
         for j, node in enumerate(active_nodes):
+            if component.node_id_1 == component.node_id_2:
+                continue
             if component.node_id_1 == node:
                 incidence_matrix[i][j] = -1
             elif component.node_id_2 == node:
