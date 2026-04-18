@@ -138,16 +138,23 @@
 
         #author {
             position: fixed;
-            bottom: 20px;
-            left: 24px;
-            font-size: 0.8rem;
+            bottom: 12px;
+            right: 16px;
+            font-size: 0.7rem;
             color: #94a3b8;
-            letter-spacing: 0.3px;
+            letter-spacing: 0.2px;
         }
 
-        #author span {
-            color: #475569;
-            font-weight: 600;
+        #copyright {
+            position: fixed;
+            bottom: 8px;
+            right: 12px;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.35);
+            letter-spacing: 0.2px;
+            z-index: 10;
+            pointer-events: none;
+            display: none;
         }
     </style>
 </head>
@@ -209,8 +216,10 @@
             <p>Click to begin</p>
         </div>
 
-        <div id="author">Made by <span>Anay Gokhale</span></div>
+        <div id="author">© 2026 Anay Gokhale. All rights reserved.</div>
     </div>
+
+    <div id="copyright">© 2026 Anay Gokhale. All rights reserved.</div>
 
     <script>
         // pygbag hooks into these to report progress
@@ -235,6 +244,7 @@
 
         function startApp() {
             document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('copyright').style.display = 'block';
             setTimeout(function () {
                 document.getElementById('loading-screen').remove();
             }, 500);

@@ -560,6 +560,7 @@ class BreadboardSimulator:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.Font(None, 28)
         self.small_font = pygame.font.Font(None, 22)
+        self.copyright_font = pygame.font.SysFont("arial", 10)
         
         # Breadboard setup
         self.board_x = 50
@@ -1383,6 +1384,10 @@ class BreadboardSimulator:
             
         self.clear_button.draw(self.screen, self.small_font, m_pos)
         self.undo_button.draw(self.screen, self.small_font, m_pos)
+
+        # Copyright notice
+        copyright_surf = self.copyright_font.render("\u00a9 2026 Anay Gokhale. All rights reserved.", True, (160, 170, 180))
+        self.screen.blit(copyright_surf, (5, self.board_y + self.board_height + 80))
         
     def handle_click(self, pos, button=1):
         def do_select(item):
@@ -1533,15 +1538,6 @@ class BreadboardSimulator:
                     return
 
                 if self.first_hole is None:
-                    if isinstance(self.active_component, Battery):
-                        if hole == self.holes[0]:
-                            self.uf.set_id(hole, 0)
-                            self.sync_node_ids()
-                        else:
-                            prev_id = hole.node_id
-                            self.uf.set_id(hole, 0)
-                            self.uf.set_id(self.holes[0], prev_id)
-                            self.sync_node_ids()
                     self.first_hole = hole
                     self.active_component.node_id_1 = hole.node_id
                     print(f"Start: row={hole.row}, col={hole.col}, rail={hole.is_rail} [Node {hole.node_id}]")
