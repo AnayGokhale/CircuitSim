@@ -263,7 +263,9 @@ custom_html = f"""<!DOCTYPE html>
     <div id="transfer" hidden></div>
     <div id="pyconsole"><div id="terminal" tabIndex=1 align="left"></div></div>
     <div id="html"></div>
+    <div id="info"></div>
     <div id="crt"></div>
+    <div id="box" hidden></div>
     <div id="dlg" hidden>
         <input type="file" id="dlg_multifile" multiple accept="image/*">
     </div>
