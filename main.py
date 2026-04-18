@@ -1811,7 +1811,7 @@ class BreadboardSimulator:
             self.window.blit(scaled, (offset_x, offset_y))
 
             # Copyright notice — drawn on window so it anchors to the real corner
-            copyright_surf = self.copyright_font.render("\u00a9 2026 Anay Gokhale. All rights reserved.", True, (160, 170, 180))
+            copyright_surf = self.copyright_font.render("\u00a9 © 2026 Anay Gokhale | Licensed under Apache 2.0", True, (160, 170, 180))
             self.window.blit(copyright_surf, (5, win_h - copyright_surf.get_height() - 5))
             pygame.display.flip()
             self.clock.tick(60)

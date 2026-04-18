@@ -1,263 +1,339 @@
 """
 Run this after: python -m pygbag --build --disable-sound-format-error .
-It patches build/web/index.html to use the custom loading screen.
+Replaces the generated build/web/index.html body with the custom loading screen,
+while keeping all pygbag required scripts intact.
 """
+
+import re
 
 with open("build/web/index.html", "r", encoding="utf-8") as f:
-    content = f.read()
+    generated = f.read()
 
-# ── 1. Fix the grey page background in the Python loader block ───────────────
-content = content.replace(
-    'platform.document.body.style.background = "#7f7f7f"',
-    'platform.document.body.style.background = "#f8f9fa"'
-)
+# ── Extract everything pygbag needs to keep ──────────────────────────────────
 
-# ── 2. Hide the infobox completely (we replace it with our own UI) ───────────
-content = content.replace(
-    'platform.window.infobox.innerText = msg',
-    'platform.window.infobox.style.display = "none"; platform.window.infobox.innerText = msg'
-)
-content = content.replace(
-    'platform.window.infobox.innerText = f"installing {pkg}"',
-    'pass  # platform.window.infobox.innerText = f"installing {pkg}"'
-)
+# 1. The main pygbag loader <script> tag (big one at top with python code inside)
+main_script_match = re.search(r'(<script src="https://pygame-web\.github\.io[^>]+>.*?</script>)', generated, re.DOTALL)
+main_script = main_script_match.group(1) if main_script_match else ""
 
-# ── 3. Replace the infobox CSS with invisible styles ────────────────────────
-old_infobox_css = """        #infobox {
-            position: fixed; /* center relative to viewport */
-            background: green;
-            color: blue;
-            font-weight: bold;
-            padding: 12px 24px;
- /*           display: none; */
-            z-index: 999999;
-        }"""
+# 2. The config <script> block
+config_match = re.search(r'(<script type="application/javascript">\s*// END BLOCK.*?</script>)', generated, re.DOTALL)
+config_script = config_match.group(1) if config_match else ""
 
-new_infobox_css = """        #infobox {
-            display: none !important;
-        }"""
+# 3. browserfs script tag
+browserfs_match = re.search(r'(<script src="https://pygame-web\.github\.io[^"]*browserfs[^"]*"></script>)', generated)
+browserfs_script = browserfs_match.group(1) if browserfs_match else ""
 
-content = content.replace(old_infobox_css, new_infobox_css)
+# 4. The bottom custom_onload/custom_prerun script block
+bottom_script_match = re.search(r'(<script type="application/javascript">\s*\n\s*globalThis\.__canvas_resized.*?</script>)', generated, re.DOTALL)
+bottom_script = bottom_script_match.group(1) if bottom_script_match else ""
 
-# ── 4. Replace the body background ──────────────────────────────────────────
-content = content.replace(
-    "background-color:powderblue;",
-    "background-color: #f8f9fa;"
-)
+# Report what was found
+print(f"main_script found: {bool(main_script)}")
+print(f"config_script found: {bool(config_script)}")
+print(f"browserfs_script found: {bool(browserfs_script)}")
+print(f"bottom_script found: {bool(bottom_script)}")
 
-# ── 5. Inject custom loading screen HTML + CSS just before </body> ───────────
-custom_html = """
-<style>
-    * { box-sizing: border-box; }
+# ── Build the new index.html ─────────────────────────────────────────────────
 
-    #custom-loading {
-        position: fixed;
-        inset: 0;
-        background: #f8f9fa;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 32px;
-        z-index: 99999;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        transition: opacity 0.4s ease;
-    }
+custom_html = f"""<!DOCTYPE html>
+<html lang="en">
 
-    #custom-loading.hidden {
-        opacity: 0;
-        pointer-events: none;
-    }
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Breadboard Simulator</title>
 
-    .cl-logo {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 16px;
-    }
+    {main_script}
 
-    .cl-logo h1 {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #1e293b;
-        letter-spacing: -0.5px;
-        margin: 0;
-    }
+    {config_script}
 
-    .cl-logo p {
-        font-size: 1rem;
-        color: #64748b;
-        margin: -16px 0 0 0;
-    }
+    {browserfs_script}
 
-    .cl-progress-wrap {
-        width: 320px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        align-items: center;
-    }
+    <style>
+        * {{
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }}
 
-    .cl-bar-bg {
-        width: 100%;
-        height: 6px;
-        background: #e2e8f0;
-        border-radius: 999px;
-        overflow: hidden;
-    }
+        body {{
+            background: #f8f9fa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }}
 
-    #cl-bar-fill {
-        height: 100%;
-        width: 0%;
-        background: #3b82f6;
-        border-radius: 999px;
-        transition: width 0.3s ease;
-    }
+        canvas.emscripten {{
+            border: 0px none;
+            background-color: transparent;
+            width: 100%;
+            height: 100%;
+            z-index: 5;
+            padding: 0;
+            margin: 0 auto;
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+        }}
 
-    #cl-status {
-        font-size: 0.85rem;
-        color: #94a3b8;
-    }
+        #loading-screen {{
+            position: fixed;
+            inset: 0;
+            background: #f8f9fa;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 32px;
+            z-index: 100;
+            transition: opacity 0.4s ease;
+        }}
 
-    #cl-start-wrap {
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        gap: 12px;
-    }
+        #loading-screen.hidden {{
+            opacity: 0;
+            pointer-events: none;
+        }}
 
-    #cl-start-btn {
-        padding: 14px 40px;
-        background: #3b82f6;
-        color: white;
-        border: none;
-        border-radius: 8px;
-        font-size: 1rem;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.15s ease, transform 0.1s ease;
-        font-family: inherit;
-    }
+        .logo-area {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+        }}
 
-    #cl-start-btn:hover { background: #2563eb; transform: translateY(-1px); }
-    #cl-start-btn:active { transform: translateY(0px); }
+        .board-icon {{
+            width: 80px;
+            height: 80px;
+        }}
 
-    #cl-start-wrap p {
-        font-size: 0.8rem;
-        color: #94a3b8;
-        margin: 0;
-    }
+        h1 {{
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1e293b;
+            letter-spacing: -0.5px;
+        }}
 
-    #cl-author {
-        position: fixed;
-        bottom: 20px;
-        left: 24px;
-        font-size: 0.8rem;
-        color: #94a3b8;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        z-index: 99999;
-    }
+        p.subtitle {{
+            font-size: 1rem;
+            color: #64748b;
+            margin-top: -24px;
+        }}
 
-    #cl-author strong {
-        color: #475569;
-        font-weight: 600;
-    }
-</style>
+        .progress-container {{
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }}
 
-<div id="custom-loading">
-    <div class="cl-logo">
-        <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect width="80" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/>
-            <rect x="8" y="12" width="64" height="56" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5"/>
-            <g fill="#475569">
-                <circle cx="18" cy="24" r="2.5"/><circle cx="26" cy="24" r="2.5"/><circle cx="34" cy="24" r="2.5"/>
-                <circle cx="42" cy="24" r="2.5"/><circle cx="50" cy="24" r="2.5"/><circle cx="58" cy="24" r="2.5"/>
-                <circle cx="18" cy="34" r="2.5"/><circle cx="26" cy="34" r="2.5"/><circle cx="34" cy="34" r="2.5"/>
-                <circle cx="42" cy="34" r="2.5"/><circle cx="50" cy="34" r="2.5"/><circle cx="58" cy="34" r="2.5"/>
-                <circle cx="18" cy="50" r="2.5"/><circle cx="26" cy="50" r="2.5"/><circle cx="34" cy="50" r="2.5"/>
-                <circle cx="42" cy="50" r="2.5"/><circle cx="50" cy="50" r="2.5"/><circle cx="58" cy="50" r="2.5"/>
-                <circle cx="18" cy="60" r="2.5"/><circle cx="26" cy="60" r="2.5"/><circle cx="34" cy="60" r="2.5"/>
-                <circle cx="42" cy="60" r="2.5"/><circle cx="50" cy="60" r="2.5"/><circle cx="58" cy="60" r="2.5"/>
-            </g>
-            <line x1="26" y1="34" x2="26" y2="50" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round"/>
-            <rect x="38" y="31" width="12" height="6" rx="2" fill="#d97706"/>
-        </svg>
-        <h1>Breadboard Simulator</h1>
-        <p>Interactive circuit simulation</p>
-    </div>
+        .progress-bar-bg {{
+            width: 100%;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+        }}
 
-    <div class="cl-progress-wrap" id="cl-progress-area">
-        <div class="cl-bar-bg">
-            <div id="cl-bar-fill"></div>
+        .progress-bar-fill {{
+            height: 100%;
+            width: 0%;
+            background: #3b82f6;
+            border-radius: 999px;
+            transition: width 0.3s ease;
+        }}
+
+        #status-text {{
+            font-size: 0.85rem;
+            color: #94a3b8;
+        }}
+
+        #click-prompt {{
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }}
+
+        #start-btn {{
+            padding: 14px 40px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.1s ease;
+        }}
+
+        #start-btn:hover {{
+            background: #2563eb;
+            transform: translateY(-1px);
+        }}
+
+        #start-btn:active {{
+            transform: translateY(0);
+        }}
+
+        #click-prompt p {{
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }}
+
+        #author {{
+            position: fixed;
+            bottom: 12px;
+            left: 16px;
+            font-size: 0.7rem;
+            color: #94a3b8;
+            letter-spacing: 0.2px;
+        }}
+
+        #copyright {{
+            position: fixed;
+            bottom: 8px;
+            left: 12px;
+            font-size: 0.65rem;
+            color: rgba(255, 255, 255, 0.35);
+            letter-spacing: 0.2px;
+            z-index: 10;
+            pointer-events: none;
+            display: none;
+        }}
+
+        /* Hide pygbag's default UI elements */
+        #infobox {{ display: none !important; }}
+        #transfer {{ display: none !important; }}
+        #pyconsole {{ display: none !important; }}
+    </style>
+</head>
+
+<body>
+
+    <div id="loading-screen">
+        <div class="logo-area">
+            <svg class="board-icon" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect width="80" height="80" rx="10" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" />
+                <rect x="8" y="12" width="64" height="56" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.5" />
+                <g fill="#475569">
+                    <circle cx="18" cy="24" r="2.5" /><circle cx="26" cy="24" r="2.5" /><circle cx="34" cy="24" r="2.5" />
+                    <circle cx="42" cy="24" r="2.5" /><circle cx="50" cy="24" r="2.5" /><circle cx="58" cy="24" r="2.5" />
+                    <circle cx="18" cy="34" r="2.5" /><circle cx="26" cy="34" r="2.5" /><circle cx="34" cy="34" r="2.5" />
+                    <circle cx="42" cy="34" r="2.5" /><circle cx="50" cy="34" r="2.5" /><circle cx="58" cy="34" r="2.5" />
+                    <circle cx="18" cy="50" r="2.5" /><circle cx="26" cy="50" r="2.5" /><circle cx="34" cy="50" r="2.5" />
+                    <circle cx="42" cy="50" r="2.5" /><circle cx="50" cy="50" r="2.5" /><circle cx="58" cy="50" r="2.5" />
+                    <circle cx="18" cy="60" r="2.5" /><circle cx="26" cy="60" r="2.5" /><circle cx="34" cy="60" r="2.5" />
+                    <circle cx="42" cy="60" r="2.5" /><circle cx="50" cy="60" r="2.5" /><circle cx="58" cy="60" r="2.5" />
+                </g>
+                <line x1="26" y1="34" x2="26" y2="50" stroke="#3b82f6" stroke-width="2.5" stroke-linecap="round" />
+                <rect x="38" y="31" width="12" height="6" rx="2" fill="#d97706" />
+            </svg>
+
+            <h1>Breadboard Simulator</h1>
+            <p class="subtitle">Interactive circuit simulation</p>
         </div>
-        <span id="cl-status">Loading Python runtime…</span>
+
+        <div class="progress-container" id="progress-area">
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progress-fill"></div>
+            </div>
+            <span id="status-text">Loading Python runtime…</span>
+        </div>
+
+        <div id="click-prompt">
+            <button id="start-btn" onclick="startApp()">Launch Simulator</button>
+            <p>Click to begin</p>
+        </div>
+
+        <div id="author">© 2026 Anay Gokhale | Licensed under Apache 2.0</div>
     </div>
 
-    <div id="cl-start-wrap">
-        <button id="cl-start-btn" onclick="clStart()">Launch Simulator</button>
-        <p>Click to begin</p>
+    <div id="copyright">© 2026 Anay Gokhale | Licensed under Apache 2.0</div>
+
+    <!-- pygbag required elements (hidden, but must exist in DOM) -->
+    <canvas class="emscripten" id="canvas" width="1px" height="1px"
+        oncontextmenu="event.preventDefault()" tabindex=1></canvas>
+    <canvas class="emscripten" id="canvas3d" width="1280px" height="720px"
+        oncontextmenu="event.preventDefault()" tabindex=1 hidden></canvas>
+    <div id="infobox">Loading...</div>
+    <div id="transfer" hidden></div>
+    <div id="pyconsole"><div id="terminal" tabIndex=1 align="left"></div></div>
+    <div id="html"></div>
+    <div id="crt"></div>
+    <div id="dlg" hidden>
+        <input type="file" id="dlg_multifile" multiple accept="image/*">
     </div>
-</div>
+    <div id="system" hidden></div>
 
-<div id="cl-author">Made by <strong>Anay Gokhale</strong></div>
+    <script>
+        var _progress = 0;
+        var _interval = null;
 
-<script>
-    var _clProgress = 0;
-    var _clInterval = null;
+        function setStatus(text) {{
+            var el = document.getElementById('status-text');
+            if (el) el.textContent = text;
+        }}
 
-    // Animate the progress bar up to 90% while loading
-    _clInterval = setInterval(function() {
-        _clProgress += Math.random() * 3;
-        if (_clProgress >= 90) {
-            _clProgress = 90;
-            clearInterval(_clInterval);
-        }
-        document.getElementById('cl-bar-fill').style.width = _clProgress + '%';
-    }, 250);
+        function setProgress(pct) {{
+            _progress = pct;
+            var fill = document.getElementById('progress-fill');
+            if (fill) fill.style.width = pct + '%';
+            if (pct >= 100) showStartButton();
+        }}
 
-    // Watch for pygbag's infobox changing to "Ready to start"
-    // That's our signal that loading is complete
-    var _clObserver = new MutationObserver(function() {
-        var infobox = document.getElementById('infobox');
-        if (infobox && infobox.innerText.indexOf('Ready') >= 0) {
-            clReady();
-        }
-    });
+        function showStartButton() {{
+            document.getElementById('progress-area').style.display = 'none';
+            document.getElementById('click-prompt').style.display = 'flex';
+        }}
 
-    window.addEventListener('load', function() {
-        var infobox = document.getElementById('infobox');
-        if (infobox) {
-            _clObserver.observe(infobox, { childList: true, characterData: true, subtree: true });
-        }
-    });
+        function startApp() {{
+            var c = document.getElementById('canvas');
+            if (c) c.click();
+            document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('copyright').style.display = 'block';
+            setTimeout(function () {{
+                var s = document.getElementById('loading-screen');
+                if (s) s.remove();
+            }}, 500);
+        }}
 
-    function clReady() {
-        clearInterval(_clInterval);
-        _clObserver.disconnect();
-        document.getElementById('cl-bar-fill').style.width = '100%';
-        document.getElementById('cl-status').textContent = 'Ready!';
-        setTimeout(function() {
-            document.getElementById('cl-progress-area').style.display = 'none';
-            document.getElementById('cl-start-wrap').style.display = 'flex';
-        }, 400);
-    }
+        // Fake progress bar while loading
+        _interval = setInterval(function () {{
+            _progress += Math.random() * 3;
+            if (_progress >= 90) {{ _progress = 90; clearInterval(_interval); }}
+            var fill = document.getElementById('progress-fill');
+            if (fill) fill.style.width = _progress + '%';
+        }}, 250);
 
-    function clStart() {
-        // Simulate the click that pygbag needs to unlock audio
-        document.getElementById('canvas').click();
-        document.getElementById('custom-loading').classList.add('hidden');
-        document.getElementById('cl-author').style.display = 'none';
-        setTimeout(function() {
-            var el = document.getElementById('custom-loading');
-            if (el) el.remove();
-        }, 500);
-    }
-</script>
-"""
+        // Watch pygbag's infobox for "Ready" signal
+        window.addEventListener('load', function () {{
+            var infobox = document.getElementById('infobox');
+            if (infobox) {{
+                var observer = new MutationObserver(function () {{
+                    if (infobox.innerText.indexOf('Ready') >= 0) {{
+                        clearInterval(_interval);
+                        observer.disconnect();
+                        setProgress(100);
+                        setStatus('Ready!');
+                    }}
+                }});
+                observer.observe(infobox, {{ childList: true, characterData: true, subtree: true }});
+            }}
+        }});
 
-content = content.replace("</body>", custom_html + "\n</body>")
+        function show_infobox() {{}}
+    </script>
+
+    {bottom_script}
+
+</body>
+</html>"""
 
 with open("build/web/index.html", "w", encoding="utf-8") as f:
-    f.write(content)
+    f.write(custom_html)
 
 print("Done! build/web/index.html patched successfully.")
