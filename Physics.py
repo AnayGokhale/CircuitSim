@@ -1,8 +1,9 @@
 import numpy as np
 from Components import Wire, Battery, Resistor, Capacitor, Inductor, LED
 
-
 def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0):
+    # Normalize non-directional components before analysis
+    normalize_bidirectional_components(components)
     loads = [component for component in components if component.name != "Battery"]
     sources = [component for component in components if component.name == "Battery"]
     load_matrix = [row for i, row in enumerate(incidence_matrix) if components[i].name != "Battery"]
@@ -170,6 +171,16 @@ def ModifiedNodalAnalysis(incidence_matrix, components, active_nodes, dt=1/60.0)
     
     return full_voltages, battery_currents
 
+# Non-directional components whose behavior is symmetric regardless of node order
+NON_DIRECTIONAL = (Resistor, Inductor)
+
+def normalize_bidirectional_components(components):
+    for component in components:
+        if isinstance(component, NON_DIRECTIONAL):
+            if component.node_id_1 is not None and component.node_id_2 is not None:
+                if component.node_id_1 > component.node_id_2:
+                    component.node_id_1, component.node_id_2 = component.node_id_2, component.node_id_1
+
 def calculate_brightness(led_component):
     MAX_POWER = 0.040 
     
@@ -184,6 +195,7 @@ def calculate_brightness(led_component):
     return max(0.0, percentage)
 
 def generate_incidence_matrix(components, active_nodes):
+    normalize_bidirectional_components(components)
     incidence_matrix = np.zeros((len(components), len(active_nodes)))
     for i, component in enumerate(components):
         for j, node in enumerate(active_nodes):
