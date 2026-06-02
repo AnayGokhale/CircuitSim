@@ -1048,6 +1048,274 @@ class TutorialManager:
         pygame.draw.polygon(surface, (0, 0, 0), points, 1)
 
 
+class TextInput:
+    def __init__(self, rect, font, placeholder="", max_chars=200):
+        self.rect = rect
+        self.font = font
+        self.placeholder = placeholder
+        self.text = ""
+        self.active = False
+        self.max_chars = max_chars
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.active = self.rect.collidepoint(event.pos)
+        elif event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.key not in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_TAB, pygame.K_ESCAPE):
+                if len(self.text) < self.max_chars:
+                    self.text += event.unicode
+
+    def draw(self, surface):
+        border = (0, 100, 255) if self.active else (200, 200, 200)
+        pygame.draw.rect(surface, (255, 255, 255), self.rect, border_radius=4)
+        pygame.draw.rect(surface, border, self.rect, 2, border_radius=4)
+        display = self.text if self.text else self.placeholder
+        color = (30, 30, 30) if self.text else (170, 170, 170)
+        inner = self.rect.inflate(-16, 0)
+        old_clip = surface.get_clip()
+        surface.set_clip(inner)
+        surf = self.font.render(display, True, color)
+        surface.blit(surf, (inner.x, self.rect.centery - surf.get_height() // 2))
+        surface.set_clip(old_clip)
+
+
+class TextArea:
+    def __init__(self, rect, font, placeholder="", max_chars=2000):
+        self.rect = rect
+        self.font = font
+        self.placeholder = placeholder
+        self.text = ""
+        self.active = False
+        self.max_chars = max_chars
+        self.scroll = 0
+
+    def _wrapped(self):
+        max_w = self.rect.width - 16
+        out = []
+        for para in (self.text or "").split("\n"):
+            if not para:
+                out.append("")
+                continue
+            words, cur = para.split(" "), ""
+            for w in words:
+                test = (cur + " " + w).strip()
+                if self.font.size(test)[0] <= max_w:
+                    cur = test
+                else:
+                    if cur:
+                        out.append(cur)
+                    cur = w
+            out.append(cur)
+        return out
+
+    def handle_event(self, event):
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            self.active = self.rect.collidepoint(event.pos)
+            if self.active:
+                if event.button == 4:
+                    self.scroll = max(0, self.scroll - 1)
+                elif event.button == 5:
+                    self.scroll += 1
+        elif event.type == pygame.KEYDOWN and self.active:
+            if event.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                if len(self.text) < self.max_chars:
+                    self.text += "\n"
+            elif event.key not in (pygame.K_TAB, pygame.K_ESCAPE):
+                if len(self.text) < self.max_chars:
+                    self.text += event.unicode
+            lh = self.font.get_linesize()
+            vis = (self.rect.height - 8) // lh
+            self.scroll = max(0, len(self._wrapped()) - vis)
+
+    def draw(self, surface):
+        border = (0, 100, 255) if self.active else (200, 200, 200)
+        pygame.draw.rect(surface, (255, 255, 255), self.rect, border_radius=4)
+        pygame.draw.rect(surface, border, self.rect, 2, border_radius=4)
+        old_clip = surface.get_clip()
+        surface.set_clip(self.rect.inflate(-4, -4))
+        if not self.text:
+            ph = self.font.render(self.placeholder, True, (170, 170, 170))
+            surface.blit(ph, (self.rect.x + 8, self.rect.y + 6))
+        else:
+            lh = self.font.get_linesize()
+            vis = (self.rect.height - 8) // lh
+            for i, line in enumerate(self._wrapped()[self.scroll: self.scroll + vis + 1]):
+                ls = self.font.render(line, True, (30, 30, 30))
+                surface.blit(ls, (self.rect.x + 8, self.rect.y + 6 + i * lh))
+        surface.set_clip(old_clip)
+
+
+class BugReportMenu:
+    _REPO = "AnayGokhale/CircuitSim"
+    _TYPES = ["Bug", "Crash", "Visual", "Idea"]
+    _LABELS = {"Bug": "bug", "Crash": "crash", "Visual": "ui", "Idea": "enhancement"}
+
+    def __init__(self, font, small_font):
+        self.font = font
+        self.small_font = small_font
+        self.visible = False
+        self.selected_type = "Bug"
+        self.error_msg = ""
+
+        pw, ph = 750, 560
+        px = (WINDOW_WIDTH - pw) // 2
+        py = (WINDOW_HEIGHT - ph) // 2
+        self.panel = pygame.Rect(px, py, pw, ph)
+        self.close_rect = pygame.Rect(self.panel.right - 36, self.panel.y + 10, 26, 26)
+
+        ty = self.panel.y + 65
+        self.type_rects = {
+            t: pygame.Rect(self.panel.x + 90 + i * 112, ty, 104, 32)
+            for i, t in enumerate(self._TYPES)
+        }
+
+        sy = ty + 58
+        self.summary = TextInput(
+            pygame.Rect(self.panel.x + 20, sy, pw - 40, 34),
+            font, placeholder="Short title for the issue"
+        )
+
+        wy = sy + 34 + 32
+        self.what_happened = TextArea(
+            pygame.Rect(self.panel.x + 20, wy, pw - 40, 112),
+            small_font, placeholder="Describe what happened…"
+        )
+
+        sty = wy + 112 + 32
+        self.steps = TextArea(
+            pygame.Rect(self.panel.x + 20, sty, pw - 40, 90),
+            small_font, placeholder="1. Open the app\n2. Click…\n3. See error"
+        )
+
+        self.submit_rect = pygame.Rect(self.panel.x + 20, sty + 90 + 18, pw - 40, 40)
+
+    def open(self):
+        self.visible = True
+        self.selected_type = "Bug"
+        self.summary.text = ""
+        self.summary.active = False
+        self.what_happened.text = ""
+        self.what_happened.active = False
+        self.what_happened.scroll = 0
+        self.steps.text = ""
+        self.steps.active = False
+        self.steps.scroll = 0
+        self.error_msg = ""
+
+    def _build_url(self):
+        import urllib.parse
+        body_lines = [
+            f"**Type:** {self.selected_type}", "",
+            "**What Happened:**", self.what_happened.text.strip(),
+        ]
+        if self.steps.text.strip():
+            body_lines += ["", "**Steps to Reproduce:**", self.steps.text.strip()]
+        return (
+            "https://github.com/" + self._REPO + "/issues/new?"
+            + urllib.parse.urlencode({
+                "title": self.summary.text.strip(),
+                "body": "\n".join(body_lines),
+                "labels": self._LABELS.get(self.selected_type, "bug"),
+            })
+        )
+
+    def _open_url(self, url):
+        if sys.platform == "emscripten":
+            import platform as _platform
+            _platform.window.open(url, "_blank")
+        else:
+            import webbrowser
+            webbrowser.open(url)
+
+    def handle_event(self, event):
+        if not self.visible:
+            return False
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            pos = event.pos
+            if self.close_rect.collidepoint(pos):
+                self.visible = False
+                return True
+            for t, rect in self.type_rects.items():
+                if rect.collidepoint(pos):
+                    self.selected_type = t
+                    return True
+            if self.submit_rect.collidepoint(pos):
+                if not self.summary.text.strip():
+                    self.error_msg = "Summary is required."
+                elif not self.what_happened.text.strip():
+                    self.error_msg = '"What Happened?" is required.'
+                else:
+                    self._open_url(self._build_url())
+                    self.visible = False
+                return True
+            self.summary.handle_event(event)
+            self.what_happened.handle_event(event)
+            self.steps.handle_event(event)
+            return True
+        elif event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.visible = False
+                return True
+            self.summary.handle_event(event)
+            self.what_happened.handle_event(event)
+            self.steps.handle_event(event)
+            return True
+        return True
+
+    def draw(self, surface):
+        if not self.visible:
+            return
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 140))
+        surface.blit(overlay, (0, 0))
+
+        pygame.draw.rect(surface, (255, 255, 255), self.panel, border_radius=12)
+        pygame.draw.rect(surface, (210, 210, 210), self.panel, 2, border_radius=12)
+
+        ts = self.font.render("Report an Issue", True, (20, 20, 20))
+        surface.blit(ts, (self.panel.x + 20, self.panel.y + 16))
+        pygame.draw.line(surface, (220, 220, 220),
+                         (self.panel.x + 1, self.panel.y + 52),
+                         (self.panel.right - 1, self.panel.y + 52), 1)
+
+        pygame.draw.rect(surface, (235, 235, 235), self.close_rect, border_radius=5)
+        xs = self.font.render("×", True, (80, 80, 80))
+        surface.blit(xs, xs.get_rect(center=self.close_rect.center))
+
+        ty = list(self.type_rects.values())[0].y
+        tl = self.small_font.render("Type:", True, (80, 80, 80))
+        surface.blit(tl, (self.panel.x + 20, ty + 8))
+        for t, rect in self.type_rects.items():
+            sel = t == self.selected_type
+            pygame.draw.rect(surface, BUTTON_SELECTED if sel else (220, 220, 220), rect, border_radius=6)
+            ss = self.small_font.render(t, True, (255, 255, 255) if sel else (60, 60, 60))
+            surface.blit(ss, ss.get_rect(center=rect.center))
+
+        sl = self.small_font.render("Summary  (required)", True, (80, 80, 80))
+        surface.blit(sl, (self.panel.x + 20, self.summary.rect.y - 20))
+        self.summary.draw(surface)
+
+        wl = self.small_font.render("What Happened?  (required)", True, (80, 80, 80))
+        surface.blit(wl, (self.panel.x + 20, self.what_happened.rect.y - 20))
+        self.what_happened.draw(surface)
+
+        stl = self.small_font.render("Steps to Reproduce  (optional)", True, (80, 80, 80))
+        surface.blit(stl, (self.panel.x + 20, self.steps.rect.y - 20))
+        self.steps.draw(surface)
+
+        pygame.draw.rect(surface, BUTTON_COLOR, self.submit_rect, border_radius=8)
+        sub = self.font.render("Open GitHub Issue  →", True, (255, 255, 255))
+        surface.blit(sub, sub.get_rect(center=self.submit_rect.center))
+
+        if self.error_msg:
+            es = self.small_font.render(self.error_msg, True, (200, 30, 30))
+            surface.blit(es, (self.panel.x + 20, self.submit_rect.bottom + 6))
+
+
 class BreadboardSimulator:
 # Main application class
     def __init__(self):
@@ -1097,6 +1365,7 @@ class BreadboardSimulator:
         self.load_assets()
         
         self.side_panel = SidePanel(920, 150, 260, 450, self)
+        self.bug_report_menu = BugReportMenu(self.font, self.small_font)
         self.tutorial_manager = TutorialManager(self)
         
         # Measurements
@@ -1674,6 +1943,8 @@ class BreadboardSimulator:
         self.run_button = Button(730, 30, 80, 45, "Run", None)
         self.help_button_center = (1150, 105)
         self.help_button_radius = 14
+        self.bug_button_center = (1150, 135)
+        self.bug_button_radius = 14
         
         self.sim_back_button =  Button(730, 35, 40, 35, "", None, symbol='back10')
         self.sim_pause_button = Button(775, 35, 40, 35, "", None, symbol='pause')
@@ -1894,6 +2165,25 @@ class BreadboardSimulator:
         q_surf = self.font.render("?", True, (255, 255, 255))
         self.screen.blit(q_surf, q_surf.get_rect(center=(hcx, hcy)))
 
+        # Bug report button
+        bcx, bcy = self.bug_button_center
+        br = self.bug_button_radius
+        bug_hovered = (m_pos[0] - bcx)**2 + (m_pos[1] - bcy)**2 <= br**2
+        bug_color = BUTTON_HOVER if bug_hovered else BUTTON_COLOR
+        pygame.draw.circle(self.screen, bug_color, (bcx, bcy), br)
+        w = (255, 255, 255)
+        # Body
+        pygame.draw.ellipse(self.screen, w, (bcx - 4, bcy - 3, 8, 9))
+        # Head
+        pygame.draw.circle(self.screen, w, (bcx, bcy - 6), 3)
+        # Antennae
+        pygame.draw.line(self.screen, w, (bcx - 2, bcy - 8), (bcx - 5, bcy - 12), 1)
+        pygame.draw.line(self.screen, w, (bcx + 2, bcy - 8), (bcx + 5, bcy - 12), 1)
+        # Legs (3 pairs)
+        for ly in (bcy - 2, bcy + 1, bcy + 4):
+            pygame.draw.line(self.screen, w, (bcx - 4, ly), (bcx - 9, ly), 1)
+            pygame.draw.line(self.screen, w, (bcx + 4, ly), (bcx + 9, ly), 1)
+
         # Draw Side Panel
         if self.side_panel.visible:
             self.side_panel.draw(self.screen)
@@ -2045,6 +2335,11 @@ class BreadboardSimulator:
         hcx, hcy = self.help_button_center
         if (pos[0] - hcx)**2 + (pos[1] - hcy)**2 <= self.help_button_radius**2:
             self.tutorial_manager.start_tutorial()
+            return
+
+        bcx, bcy = self.bug_button_center
+        if (pos[0] - bcx)**2 + (pos[1] - bcy)**2 <= self.bug_button_radius**2:
+            self.bug_report_menu.open()
             return
 
         # Check holes for placement
@@ -2260,7 +2555,10 @@ class BreadboardSimulator:
                         
                 if handled_by_time_widget:
                     continue
-                    
+
+                if self.bug_report_menu.handle_event(event):
+                    continue
+
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos, event.button)
                 elif event.type == pygame.KEYDOWN:
@@ -2328,6 +2626,8 @@ class BreadboardSimulator:
 
             # Draw tutorial overlay
             self.tutorial_manager.draw(self.screen)
+
+            self.bug_report_menu.draw(self.screen)
 
             # Scale and blit to window
                         # Scale with aspect ratio preserved, letterboxing if needed
