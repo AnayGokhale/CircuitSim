@@ -36,15 +36,18 @@ RESISTOR_COLORS = {
 # Constants
 WINDOW_WIDTH = 1200
 WINDOW_HEIGHT = 700
-BREADBOARD_COLOR = (255, 255, 255)
+BREADBOARD_COLOR = (245, 245, 245) # Slightly off-white for breadboard
 HOLE_SIZE = 8
 HOLE_COLOR = (40, 40, 40)
 HOLE_SPACING = 20
-BG_COLOR = (248, 249, 250) # Light Grey
+BG_COLOR = (245, 245, 247)
 PANEL_COLOR = (255, 255, 255)
-BUTTON_COLOR = (59, 130, 246)
-BUTTON_HOVER = (96, 165, 250)
-BUTTON_SELECTED = (37, 99, 235)
+PANEL_BORDER = (220, 220, 225)
+TEXT_COLOR = (30, 30, 35)
+MUTED_TEXT = (120, 120, 130)
+BUTTON_COLOR = (0, 122, 255)
+BUTTON_HOVER = (50, 150, 255)
+BUTTON_SELECTED = (0, 100, 220)
 HOLE_HOVER_COLOR = (255, 200, 0)
 HOLE_SELECTED_COLOR = (0, 200, 100)
 
@@ -136,26 +139,18 @@ class Button:
             pygame.draw.rect(surface, white, (cx + gap//2, cy - h//2, w, h))
             
         elif self.symbol == 'back10':
-            size = 8
-            p1 = [(cx - 2, cy - size), (cx - 2, cy + size), (cx - 10, cy)]
-            p2 = [(cx + 6, cy - size), (cx + 6, cy + size), (cx - 2, cy)]
+            size = 6
+            p1 = [(cx - 1, cy - size), (cx - 1, cy + size), (cx - size - 1, cy)]
+            p2 = [(cx + size - 1, cy - size), (cx + size - 1, cy + size), (cx - 1, cy)]
             pygame.draw.polygon(surface, white, p1)
             pygame.draw.polygon(surface, white, p2)
-            
-            small_font = pygame.font.Font(None, 18)
-            t_surf = small_font.render("10", True, white)
-            surface.blit(t_surf, (cx - 7, cy + 5))
             
         elif self.symbol == 'fwd10':
-            size = 8
-            p1 = [(cx - 10, cy - size), (cx - 10, cy + size), (cx - 2, cy)]
-            p2 = [(cx - 2, cy - size), (cx - 2, cy + size), (cx + 6, cy)]
+            size = 6
+            p1 = [(cx + 1, cy - size), (cx + 1, cy + size), (cx + size + 1, cy)]
+            p2 = [(cx - size + 1, cy - size), (cx - size + 1, cy + size), (cx + 1, cy)]
             pygame.draw.polygon(surface, white, p1)
             pygame.draw.polygon(surface, white, p2)
-            
-            small_font = pygame.font.Font(None, 18)
-            t_surf = small_font.render("10", True, white)
-            surface.blit(t_surf, (cx - 3, cy + 5))
             
         elif self.symbol == 'reset':
             size = 12
@@ -187,34 +182,34 @@ class NumericCounter:
         self.plus_rect.topleft = (x + self.rect.width + 5, y)
 
     def bounds(self):
-        # Return a rect that covers label + minus + value + plus, for outside-click detection
-        left = self.minus_rect.x - 100
+        # Approximate label width based on string length to fit highlight correctly
+        left = self.minus_rect.x - (len(self.label) * 8 + 15)
         top = self.rect.y
         right = self.plus_rect.right
         bottom = self.rect.bottom
         return pygame.Rect(left, top, right - left, bottom - top)
 
     def draw(self, surface, font, mouse_pos=None):
-        label_surf = font.render(self.label, True, (0,0,0))
+        label_surf = font.render(self.label, True, TEXT_COLOR)
         label_y = self.rect.centery - label_surf.get_height() // 2
         label_x = self.minus_rect.left - 15 - label_surf.get_width()
         surface.blit(label_surf, (label_x, label_y))
 
-        bg_color = (255, 255, 255) if self.active else (230, 230, 230)
+        bg_color = BG_COLOR if self.active else PANEL_BORDER
         pygame.draw.rect(surface, bg_color, self.rect, border_radius=4)
         if self.active:
-            pygame.draw.rect(surface, (0, 100, 255), self.rect, 2, border_radius=4)
+            pygame.draw.rect(surface, BUTTON_COLOR, self.rect, 2, border_radius=4)
 
 
         display_text = self.text if self.active else f"{self.value:.2f}".rstrip('0').rstrip('.')
-        val_surf = font.render(display_text, True, (0,0,0))
+        val_surf = font.render(display_text, True, TEXT_COLOR)
         surface.blit(val_surf, val_surf.get_rect(center=self.rect.center))
 
         # Buttons
-        pygame.draw.rect(surface, (200,200,200), self.minus_rect, border_radius=4)
-        pygame.draw.rect(surface, (200,200,200), self.plus_rect, border_radius=4)
-        surface.blit(font.render("-", True, (0,0,0)), font.render("-", True, (0,0,0)).get_rect(center=self.minus_rect.center))
-        surface.blit(font.render("+", True, (0,0,0)), font.render("+", True, (0,0,0)).get_rect(center=self.plus_rect.center))
+        pygame.draw.rect(surface, PANEL_BORDER, self.minus_rect, border_radius=4)
+        pygame.draw.rect(surface, PANEL_BORDER, self.plus_rect, border_radius=4)
+        surface.blit(font.render("-", True, TEXT_COLOR), font.render("-", True, TEXT_COLOR).get_rect(center=self.minus_rect.center))
+        surface.blit(font.render("+", True, TEXT_COLOR), font.render("+", True, TEXT_COLOR).get_rect(center=self.plus_rect.center))
 
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN:
@@ -296,26 +291,26 @@ class Dropdown:
 
     def draw(self, surface, font, mouse_pos=None):
         # Label
-        label_surf = font.render(self.label, True, (0,0,0))
+        label_surf = font.render(self.label, True, TEXT_COLOR)
         surface.blit(label_surf, (self.rect.x - 80, self.rect.y + 5))
 
         # Main box
-        pygame.draw.rect(surface, (230,230,230), self.rect, border_radius=4)
-        pygame.draw.rect(surface, (100,100,100), self.rect, 2, border_radius=4)
-        text_surf = font.render(str(self.selected_option), True, (0,0,0))
+        pygame.draw.rect(surface, PANEL_BORDER, self.rect, border_radius=4)
+        text_surf = font.render(str(self.selected_option), True, TEXT_COLOR)
         surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
         
         # Dropdown arrow
         chev_x = self.rect.right - 12
         chev_y = self.rect.centery
-        pygame.draw.polygon(surface, (100,100,100), [(chev_x - 4, chev_y - 2), (chev_x + 4, chev_y - 2), (chev_x, chev_y + 3)])
+        pygame.draw.polygon(surface, MUTED_TEXT, [(chev_x - 4, chev_y - 2), (chev_x + 4, chev_y - 2), (chev_x, chev_y + 3)])
 
         # Expanded options below the button-aligned box
         if self.expanded:
             for i, opt in enumerate(self.options):
                 opt_rect = self.option_rect(i)
-                pygame.draw.rect(surface, (200,200,200), opt_rect)
-                opt_surf = font.render(str(opt), True, (0,0,0))
+                pygame.draw.rect(surface, PANEL_BORDER, opt_rect)
+                pygame.draw.rect(surface, PANEL_COLOR, opt_rect, 1) # Separator
+                opt_surf = font.render(str(opt), True, TEXT_COLOR)
                 surface.blit(opt_surf, opt_surf.get_rect(center=opt_rect.center))
 
     def handle_event(self, event):
@@ -342,17 +337,18 @@ class UnitDropdown(Dropdown):
         if mouse_pos is None:
             mouse_pos = pygame.mouse.get_pos()
         # Main box
-        pygame.draw.rect(surface, (210,210,210), self.rect, border_radius=4)
-        text_surf = font.render(str(self.selected_option), True, (0,0,0))
+        pygame.draw.rect(surface, PANEL_BORDER, self.rect, border_radius=4)
+        text_surf = font.render(str(self.selected_option), True, TEXT_COLOR)
         surface.blit(text_surf, text_surf.get_rect(center=self.rect.center))
 
         if self.expanded:
             for i, opt in enumerate(self.options):
                 opt_rect = self.option_rect(i)
-                pygame.draw.rect(surface, (200,200,200), opt_rect)
+                pygame.draw.rect(surface, PANEL_BORDER, opt_rect)
                 if opt_rect.collidepoint(mouse_pos):
-                    pygame.draw.rect(surface, (180,180,180), opt_rect)
-                opt_surf = font.render(str(opt), True, (0,0,0))
+                    pygame.draw.rect(surface, BUTTON_HOVER, opt_rect)
+                pygame.draw.rect(surface, PANEL_COLOR, opt_rect, 1) # Separator
+                opt_surf = font.render(str(opt), True, TEXT_COLOR)
                 surface.blit(opt_surf, opt_surf.get_rect(center=opt_rect.center))
 
 
@@ -403,18 +399,22 @@ class SidePanel:
             return
             
         # Draw panel background
-        pygame.draw.rect(surface, PANEL_COLOR, self.rect, border_radius=10)
-        pygame.draw.rect(surface, (200, 200, 200), self.rect, 2, border_radius=10)
+        pygame.draw.rect(surface, PANEL_COLOR, self.rect, border_radius=12)
+        pygame.draw.rect(surface, PANEL_BORDER, self.rect, 2, border_radius=12)
         
         # Title
         title = self.component.name
-        title_surf = self.title_font.render(title, True, (0, 0, 0))
+        title_surf = self.title_font.render(title, True, TEXT_COLOR)
         surface.blit(title_surf, (self.rect.x + 20, self.rect.y + 20))
         
         y_offset = 60
         line_height = 30
         
         def draw_text(text, val_color=(0,0,0)):
+            if val_color == (0,0,0):
+                val_color = TEXT_COLOR
+            elif val_color == (100, 100, 100) or val_color == (150, 150, 150):
+                val_color = MUTED_TEXT
             nonlocal y_offset
             surf = self.font.render(text, True, val_color)
             surface.blit(surf, (self.rect.x + 20, self.rect.y + y_offset))
@@ -566,11 +566,11 @@ class TutorialManager:
         self.font_body = pygame.font.Font(None, 20)
         self.font_btn = pygame.font.Font(None, 16)
         
-        # Define button bounds inside the card (x=150, y=595, w=700, h=95)
-        self.skip_btn_rect = pygame.Rect(735, 607, 100, 26)
-        self.back_btn_rect = pygame.Rect(615, 649, 70, 28)
-        self.play_btn_rect = pygame.Rect(690, 649, 75, 28)
-        self.next_btn_rect = pygame.Rect(770, 649, 65, 28)
+        # Define button bounds for top banner (h=75)
+        self.skip_btn_rect = pygame.Rect(1070, 10, 100, 24)
+        self.back_btn_rect = pygame.Rect(920, 42, 60, 24)
+        self.play_btn_rect = pygame.Rect(990, 42, 70, 24)
+        self.next_btn_rect = pygame.Rect(1070, 42, 100, 24)
 
     def draw_multiline_text(self, surface, text, rect, font, color):
         words = text.split(' ')
@@ -1001,17 +1001,15 @@ class TutorialManager:
                               self.highlight_rect.height + 8 + pulse), 
                              3, border_radius=4)
                              
-        card_rect = pygame.Rect(150, 595, 700, 95)
-        overlay = pygame.Surface((card_rect.width, card_rect.height), pygame.SRCALPHA)
-        pygame.draw.rect(overlay, (20, 30, 48, 235), (0, 0, card_rect.width, card_rect.height), border_radius=8)
-        pygame.draw.rect(overlay, (99, 102, 241, 255), (0, 0, card_rect.width, card_rect.height), width=2, border_radius=8)
-        surface.blit(overlay, card_rect.topleft)
+        card_rect = pygame.Rect(0, 0, WINDOW_WIDTH, 75)
+        pygame.draw.rect(surface, PANEL_COLOR, card_rect)
+        pygame.draw.line(surface, PANEL_BORDER, (0, 75), (WINDOW_WIDTH, 75), 2)
         
-        title_surf = self.font_title.render(self.title_text, True, (255, 255, 255))
-        surface.blit(title_surf, (card_rect.x + 20, card_rect.y + 12))
+        title_surf = self.font_title.render(self.title_text, True, TEXT_COLOR)
+        surface.blit(title_surf, (20, 12))
         
-        body_rect = pygame.Rect(card_rect.x + 20, card_rect.y + 36, 440, 54)
-        self.draw_multiline_text(surface, self.body_text, body_rect, self.font_body, (226, 232, 240))
+        body_rect = pygame.Rect(20, 38, 880, 32)
+        self.draw_multiline_text(surface, self.body_text, body_rect, self.font_body, MUTED_TEXT)
         
         m_pos = self.sim.get_internal_pos(pygame.mouse.get_pos())
         
@@ -1068,11 +1066,11 @@ class TextInput:
                     self.text += event.unicode
 
     def draw(self, surface):
-        border = (0, 100, 255) if self.active else (200, 200, 200)
-        pygame.draw.rect(surface, (255, 255, 255), self.rect, border_radius=4)
-        pygame.draw.rect(surface, border, self.rect, 2, border_radius=4)
+        border = BUTTON_COLOR if self.active else PANEL_BORDER
+        pygame.draw.rect(surface, BG_COLOR, self.rect, border_radius=6)
+        pygame.draw.rect(surface, border, self.rect, 2, border_radius=6)
         display = self.text if self.text else self.placeholder
-        color = (30, 30, 30) if self.text else (170, 170, 170)
+        color = TEXT_COLOR if self.text else MUTED_TEXT
         inner = self.rect.inflate(-16, 0)
         old_clip = surface.get_clip()
         surface.set_clip(inner)
@@ -1132,19 +1130,19 @@ class TextArea:
             self.scroll = max(0, len(self._wrapped()) - vis)
 
     def draw(self, surface):
-        border = (0, 100, 255) if self.active else (200, 200, 200)
-        pygame.draw.rect(surface, (255, 255, 255), self.rect, border_radius=4)
-        pygame.draw.rect(surface, border, self.rect, 2, border_radius=4)
+        border = BUTTON_COLOR if self.active else PANEL_BORDER
+        pygame.draw.rect(surface, BG_COLOR, self.rect, border_radius=6)
+        pygame.draw.rect(surface, border, self.rect, 2, border_radius=6)
         old_clip = surface.get_clip()
         surface.set_clip(self.rect.inflate(-4, -4))
         if not self.text:
-            ph = self.font.render(self.placeholder, True, (170, 170, 170))
+            ph = self.font.render(self.placeholder, True, MUTED_TEXT)
             surface.blit(ph, (self.rect.x + 8, self.rect.y + 6))
         else:
             lh = self.font.get_linesize()
             vis = (self.rect.height - 8) // lh
             for i, line in enumerate(self._wrapped()[self.scroll: self.scroll + vis + 1]):
-                ls = self.font.render(line, True, (30, 30, 30))
+                ls = self.font.render(line, True, TEXT_COLOR)
                 surface.blit(ls, (self.rect.x + 8, self.rect.y + 6 + i * lh))
         surface.set_clip(old_clip)
 
@@ -1176,19 +1174,19 @@ class BugReportMenu:
         sy = ty + 58
         self.summary = TextInput(
             pygame.Rect(self.panel.x + 20, sy, pw - 40, 34),
-            font, placeholder="Short title for the issue"
+            font, placeholder="E.g., Component selection fails after tutorial..."
         )
 
         wy = sy + 34 + 32
         self.what_happened = TextArea(
             pygame.Rect(self.panel.x + 20, wy, pw - 40, 112),
-            small_font, placeholder="Describe what happened…"
+            small_font, placeholder="Please provide a clear and concise description of the issue..."
         )
 
         sty = wy + 112 + 32
         self.steps = TextArea(
             pygame.Rect(self.panel.x + 20, sty, pw - 40, 90),
-            small_font, placeholder="1. Open the app\n2. Click…\n3. See error"
+            small_font, placeholder="1. Launch the application\n2. Navigate to the toolbar...\n3. Observe the unexpected behavior..."
         )
 
         self.submit_rect = pygame.Rect(self.panel.x + 20, sty + 90 + 18, pw - 40, 40)
@@ -1273,42 +1271,42 @@ class BugReportMenu:
         overlay.fill((0, 0, 0, 140))
         surface.blit(overlay, (0, 0))
 
-        pygame.draw.rect(surface, (255, 255, 255), self.panel, border_radius=12)
-        pygame.draw.rect(surface, (210, 210, 210), self.panel, 2, border_radius=12)
+        pygame.draw.rect(surface, PANEL_COLOR, self.panel, border_radius=12)
+        pygame.draw.rect(surface, PANEL_BORDER, self.panel, 2, border_radius=12)
 
-        ts = self.font.render("Report an Issue", True, (20, 20, 20))
+        ts = self.font.render("Report an Issue", True, TEXT_COLOR)
         surface.blit(ts, (self.panel.x + 20, self.panel.y + 16))
-        pygame.draw.line(surface, (220, 220, 220),
+        pygame.draw.line(surface, PANEL_BORDER,
                          (self.panel.x + 1, self.panel.y + 52),
                          (self.panel.right - 1, self.panel.y + 52), 1)
 
-        pygame.draw.rect(surface, (235, 235, 235), self.close_rect, border_radius=5)
-        xs = self.font.render("×", True, (80, 80, 80))
+        pygame.draw.rect(surface, BG_COLOR, self.close_rect, border_radius=5)
+        xs = self.font.render("X", True, MUTED_TEXT)
         surface.blit(xs, xs.get_rect(center=self.close_rect.center))
 
         ty = list(self.type_rects.values())[0].y
-        tl = self.small_font.render("Type:", True, (80, 80, 80))
+        tl = self.small_font.render("Type:", True, MUTED_TEXT)
         surface.blit(tl, (self.panel.x + 20, ty + 8))
         for t, rect in self.type_rects.items():
             sel = t == self.selected_type
-            pygame.draw.rect(surface, BUTTON_SELECTED if sel else (220, 220, 220), rect, border_radius=6)
-            ss = self.small_font.render(t, True, (255, 255, 255) if sel else (60, 60, 60))
+            pygame.draw.rect(surface, BUTTON_SELECTED if sel else BG_COLOR, rect, border_radius=6)
+            ss = self.small_font.render(t, True, (255, 255, 255) if sel else TEXT_COLOR)
             surface.blit(ss, ss.get_rect(center=rect.center))
 
-        sl = self.small_font.render("Summary  (required)", True, (80, 80, 80))
+        sl = self.small_font.render("Summary  (required)", True, MUTED_TEXT)
         surface.blit(sl, (self.panel.x + 20, self.summary.rect.y - 20))
         self.summary.draw(surface)
 
-        wl = self.small_font.render("What Happened?  (required)", True, (80, 80, 80))
+        wl = self.small_font.render("What Happened?  (required)", True, MUTED_TEXT)
         surface.blit(wl, (self.panel.x + 20, self.what_happened.rect.y - 20))
         self.what_happened.draw(surface)
 
-        stl = self.small_font.render("Steps to Reproduce  (optional)", True, (80, 80, 80))
+        stl = self.small_font.render("Steps to Reproduce  (optional)", True, MUTED_TEXT)
         surface.blit(stl, (self.panel.x + 20, self.steps.rect.y - 20))
         self.steps.draw(surface)
 
         pygame.draw.rect(surface, BUTTON_COLOR, self.submit_rect, border_radius=8)
-        sub = self.font.render("Open GitHub Issue  →", True, (255, 255, 255))
+        sub = self.font.render("Open GitHub Issue", True, (255, 255, 255))
         surface.blit(sub, sub.get_rect(center=self.submit_rect.center))
 
         if self.error_msg:
@@ -2115,17 +2113,17 @@ class BreadboardSimulator:
             hole.node_id = self.uf.get_id(hole)    
     def draw_breadboard(self):
         # Drop shadow
-        pygame.draw.rect(self.screen, (215, 220, 225),
-                        (self.board_x + 6, self.board_y + 6, self.board_width, self.board_height),
-                        border_radius=10)
+        pygame.draw.rect(self.screen, (5, 10, 20),
+                        (self.board_x + 8, self.board_y + 8, self.board_width, self.board_height),
+                        border_radius=12)
         # Main board
         pygame.draw.rect(self.screen, BREADBOARD_COLOR,
                         (self.board_x, self.board_y, self.board_width, self.board_height),
-                        border_radius=10)                       
+                        border_radius=12)                       
         # border
-        pygame.draw.rect(self.screen, (210, 215, 220),
+        pygame.draw.rect(self.screen, PANEL_BORDER,
                         (self.board_x, self.board_y, self.board_width, self.board_height),
-                        width=2, border_radius=10)
+                        width=2, border_radius=12)
         # Draw holes
         for hole in self.holes:
             color = HOLE_COLOR
@@ -2171,18 +2169,9 @@ class BreadboardSimulator:
         bug_hovered = (m_pos[0] - bcx)**2 + (m_pos[1] - bcy)**2 <= br**2
         bug_color = BUTTON_HOVER if bug_hovered else BUTTON_COLOR
         pygame.draw.circle(self.screen, bug_color, (bcx, bcy), br)
-        w = (255, 255, 255)
-        # Body
-        pygame.draw.ellipse(self.screen, w, (bcx - 4, bcy - 3, 8, 9))
-        # Head
-        pygame.draw.circle(self.screen, w, (bcx, bcy - 6), 3)
-        # Antennae
-        pygame.draw.line(self.screen, w, (bcx - 2, bcy - 8), (bcx - 5, bcy - 12), 1)
-        pygame.draw.line(self.screen, w, (bcx + 2, bcy - 8), (bcx + 5, bcy - 12), 1)
-        # Legs (3 pairs)
-        for ly in (bcy - 2, bcy + 1, bcy + 4):
-            pygame.draw.line(self.screen, w, (bcx - 4, ly), (bcx - 9, ly), 1)
-            pygame.draw.line(self.screen, w, (bcx + 4, ly), (bcx + 9, ly), 1)
+        
+        exclaim_surf = self.small_font.render("!", True, (255, 255, 255))
+        self.screen.blit(exclaim_surf, exclaim_surf.get_rect(center=(bcx, bcy)))
 
         # Draw Side Panel
         if self.side_panel.visible:
