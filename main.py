@@ -571,9 +571,7 @@ class TutorialManager:
         self.font_body = pygame.font.Font(None, 18)
         self.font_btn = pygame.font.Font(None, 16)
         
-        # Card sits as a floating panel docked to the bottom of the viewport,
-        # styled like the breadboard/side panel cards (rounded + drop shadow).
-        # Its right edge lines up with the breadboard's right edge.
+        # Align with Breadboard
         margin = 20
         card_h = 88
         card_right = self.sim.board_x + self.sim.board_width
@@ -589,8 +587,7 @@ class TutorialManager:
         play_x = next_x - 10 - 70
         back_x = play_x - 10 - 60
 
-        # Reuse the Button class so these controls share the Undo/Clear
-        # button's border-radius, padding, and blue color token exactly.
+        
         self.skip_button = Button(next_x, row1_y, 100, btn_h, "Skip Tutorial", None)
         self.back_button = Button(back_x, row2_y, 60, btn_h, "Back", None)
         self.play_button = Button(play_x, row2_y, 70, btn_h, "Pause", None)
@@ -712,12 +709,15 @@ class TutorialManager:
                 if comp_class == Wire:
                     comp = Wire((r1, c1), (r2, c2))
                     self.sim.mergers.append(comp)
+                elif comp_class == Battery:
+                    comp = comp_class((r2, c2), (r1, c1), h2.node_id, h1.node_id, *args)
+                    self.sim.components.append(comp)
                 else:
                     comp = comp_class((r1, c1), (r2, c2), h1.node_id, h2.node_id, *args)
                     self.sim.components.append(comp)
 
         if step_idx >= 2:
-            place_comp(Battery, 2, 5, 2, 10, 9.0)
+            place_comp(Battery, 2, 10, 2, 5, 9.0)
         if step_idx >= 3:
             place_comp(Resistor, 3, 10, 3, 15, 500, 0.0)
         if step_idx >= 4:
@@ -760,11 +760,11 @@ class TutorialManager:
             
         elif step_idx == 1:
             btn_pos = self.get_button_pos("Battery")
-            h1_pos = self.sim.get_hole_pos(2, 5)
-            h2_pos = self.sim.get_hole_pos(2, 10)
+            h1_pos = self.sim.get_hole_pos(2, 10)
+            h2_pos = self.sim.get_hole_pos(2, 5)
             btn = next((b for b in self.sim.buttons if b.text == "Battery"), None)
-            
-            self.actions.append({"type": "text", "title": "Step 1: Adding a Power Source", "text": "First, select the 'Battery' tool. Notice the parameter configuration options that appear below the button. We'll place the battery terminals from row 2, col 5 to col 10."})
+
+            self.actions.append({"type": "text", "title": "Step 1: Adding a Power Source", "text": "First, select the 'Battery' tool. Notice the parameter configuration options that appear below the button. The first hole clicked is the negative terminal: we'll place the battery from row 2, col 10 (-) to col 5 (+)."})
             if btn:
                 self.actions.append({"type": "highlight", "rect": btn.rect})
             self.actions.append({"type": "move", "pos": btn_pos})
@@ -1535,14 +1535,15 @@ class BreadboardSimulator:
              h1 = self.get_hole_by_node(wire.node1)
              h2 = self.get_hole_by_node(wire.node2)
              if h1 and h2:
-                 prev_id = max(h1.node_id, h2.node_id)
-                 target_id = min(h1.node_id, h2.node_id)
+                 # Query the UF directly: hole.node_id is stale once earlier
+                 # wires in this loop have already merged groups
+                 target_id = min(self.uf.get_id(h1), self.uf.get_id(h2))
                  self.uf.union(h1, h2)
                  self.uf.set_id(h1, target_id)
-        
+
         self.sync_node_ids()
 
-        for comp in self.components:
+        for comp in self.components + self.mergers:
              h1 = self.get_hole_by_node(comp.node1)
              h2 = self.get_hole_by_node(comp.node2)
              if h1: comp.node_id_1 = h1.node_id
@@ -1652,14 +1653,14 @@ class BreadboardSimulator:
             pygame.draw.line(self.screen, (50, 50, 50), lead2_start, end_pos, 2)
             
         surf = pygame.Surface((body_length + 4, height), pygame.SRCALPHA)
-        
-        pygame.draw.rect(surf, (30, 30, 30), (0, 0, body_length, height), border_radius=2)
-        pygame.draw.rect(surf, (210, 160, 50), (body_length * 0.7, 0, body_length * 0.3, height), border_radius=2)
-        pygame.draw.rect(surf, (200, 200, 200), (body_length, height//2 - 3, 3, 6), border_radius=1)
-        
-        pygame.draw.line(surf, (0, 0, 0), (body_length - 6, height//2), (body_length - 2, height//2), 1)
-        pygame.draw.line(surf, (0, 0, 0), (body_length - 4, height//2 - 2), (body_length - 4, height//2 + 2), 1)
-        pygame.draw.line(surf, (255, 255, 255), (4, height//2), (8, height//2), 1)
+
+        pygame.draw.rect(surf, (30, 30, 30), (4, 0, body_length, height), border_radius=2)
+        pygame.draw.rect(surf, (210, 160, 50), (4, 0, body_length * 0.3, height), border_radius=2)
+        pygame.draw.rect(surf, (200, 200, 200), (1, height//2 - 3, 3, 6), border_radius=1)
+
+        pygame.draw.line(surf, (0, 0, 0), (6, height//2), (10, height//2), 1)
+        pygame.draw.line(surf, (0, 0, 0), (8, height//2 - 2), (8, height//2 + 2), 1)
+        pygame.draw.line(surf, (255, 255, 255), (body_length - 4, height//2), (body_length, height//2), 1)
         
         rotated_surf = pygame.transform.rotate(surf, correct_angle)
         rect = rotated_surf.get_rect(center=(mid_x, mid_y))
@@ -2382,12 +2383,17 @@ class BreadboardSimulator:
                         self.uf.union(self.first_hole, hole)
                         self.uf.set_id(self.first_hole, target_id)
                         self.sync_node_ids()
-                        for component in self.components:
-                            if component.node_id_1 == prev_id:
+                        for component in self.components + self.mergers:
+                            if getattr(component, 'node_id_1', None) == prev_id:
                                 component.node_id_1 = target_id
-                            if component.node_id_2 == prev_id:
+                            if getattr(component, 'node_id_2', None) == prev_id:
                                 component.node_id_2 = target_id
                     else:
+                        if isinstance(self.active_component, Battery):
+                            self.active_component.node1, self.active_component.node2 = (
+                                self.active_component.node2, self.active_component.node1)
+                            self.active_component.node_id_1, self.active_component.node_id_2 = (
+                                self.active_component.node_id_2, self.active_component.node_id_1)
                         self.components.append(self.active_component)
                     print(f"End: row={hole.row}, col={hole.col}, rail={hole.is_rail} [Node {hole.node_id}]")
                     print(f"Placing {self.active_component.name}")
