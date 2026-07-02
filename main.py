@@ -168,7 +168,10 @@ class NumericCounter:
         # Text input state
         self.text = str(value)
         self.active = False
-        
+
+        # Rendered label width; refined to the exact pixel width on first draw
+        self.label_width = len(label) * 8
+
         # Determine button layout relative to main value rect
         btn_w = 30
         self.minus_rect = pygame.Rect(x - btn_w - 5, y, btn_w, height)
@@ -182,8 +185,7 @@ class NumericCounter:
         self.plus_rect.topleft = (x + self.rect.width + 5, y)
 
     def bounds(self):
-        # Approximate label width based on string length to fit highlight correctly
-        left = self.minus_rect.x - (len(self.label) * 8 + 15)
+        left = self.minus_rect.x - (self.label_width + 15)
         top = self.rect.y
         right = self.plus_rect.right
         bottom = self.rect.bottom
@@ -191,6 +193,7 @@ class NumericCounter:
 
     def draw(self, surface, font, mouse_pos=None):
         label_surf = font.render(self.label, True, TEXT_COLOR)
+        self.label_width = label_surf.get_width()
         label_y = self.rect.centery - label_surf.get_height() // 2
         label_x = self.minus_rect.left - 15 - label_surf.get_width()
         surface.blit(label_surf, (label_x, label_y))
@@ -560,17 +563,41 @@ class TutorialManager:
         self.title_text = ""
         self.body_text = ""
         self.original_state = None
+        # Single duration shared by every scripted wait/auto-advance pause
+        self.wait_duration = 1.0
         
         # Load fonts
         self.font_title = pygame.font.Font(None, 24)
-        self.font_body = pygame.font.Font(None, 20)
+        self.font_body = pygame.font.Font(None, 18)
         self.font_btn = pygame.font.Font(None, 16)
         
-        # Define button bounds for top banner (h=75)
-        self.skip_btn_rect = pygame.Rect(1070, 10, 100, 24)
-        self.back_btn_rect = pygame.Rect(920, 42, 60, 24)
-        self.play_btn_rect = pygame.Rect(990, 42, 70, 24)
-        self.next_btn_rect = pygame.Rect(1070, 42, 100, 24)
+        # Card sits as a floating panel docked to the bottom of the viewport,
+        # styled like the breadboard/side panel cards (rounded + drop shadow).
+        # Its right edge lines up with the breadboard's right edge.
+        margin = 20
+        card_h = 88
+        card_right = self.sim.board_x + self.sim.board_width
+        self.card_rect = pygame.Rect(margin, WINDOW_HEIGHT - card_h - margin,
+                                      card_right - margin, card_h)
+
+        pad_x = 20
+        btn_h = 30
+        row1_y = self.card_rect.y + 10
+        row2_y = row1_y + btn_h + 8
+
+        next_x = self.card_rect.right - pad_x - 100
+        play_x = next_x - 10 - 70
+        back_x = play_x - 10 - 60
+
+        # Reuse the Button class so these controls share the Undo/Clear
+        # button's border-radius, padding, and blue color token exactly.
+        self.skip_button = Button(next_x, row1_y, 100, btn_h, "Skip Tutorial", None)
+        self.back_button = Button(back_x, row2_y, 60, btn_h, "Back", None)
+        self.play_button = Button(play_x, row2_y, 70, btn_h, "Pause", None)
+        self.next_button = Button(next_x, row2_y, 100, btn_h, "Next", None)
+
+        self.body_rect = pygame.Rect(self.card_rect.x + pad_x, self.card_rect.y + 34,
+                                      back_x - 10 - (self.card_rect.x + pad_x), 46)
 
     def draw_multiline_text(self, surface, text, rect, font, color):
         words = text.split(' ')
@@ -729,7 +756,7 @@ class TutorialManager:
         
         if step_idx == 0:
             self.actions.append({"type": "text", "title": "Welcome to CircuitSim!", "text": "This walkthrough will guide you through all features of the simulator by building a working circuit. Let's get started!"})
-            self.actions.append({"type": "wait", "duration": 2.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             
         elif step_idx == 1:
             btn_pos = self.get_button_pos("Battery")
@@ -742,17 +769,17 @@ class TutorialManager:
                 self.actions.append({"type": "highlight", "rect": btn.rect})
             self.actions.append({"type": "move", "pos": btn_pos})
             self.actions.append({"type": "click", "pos": btn_pos})
-            self.actions.append({"type": "wait", "duration": 0.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight_param"})
-            self.actions.append({"type": "wait", "duration": 1.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h1_pos[0]-10, h1_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h1_pos})
             self.actions.append({"type": "click", "pos": h1_pos})
-            self.actions.append({"type": "wait", "duration": 0.3})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h2_pos[0]-10, h2_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h2_pos})
             self.actions.append({"type": "click", "pos": h2_pos})
-            self.actions.append({"type": "wait", "duration": 1.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 2:
             btn_pos = self.get_button_pos("Resistor")
@@ -765,25 +792,25 @@ class TutorialManager:
                 self.actions.append({"type": "highlight", "rect": btn.rect})
             self.actions.append({"type": "move", "pos": btn_pos})
             self.actions.append({"type": "click", "pos": btn_pos})
-            self.actions.append({"type": "wait", "duration": 0.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight_param"})
             
             # Click plus button twice to go from 300 to 500 (since step is 100)
             plus_pos = lambda: self.sim.param_widget.plus_rect.center if (self.sim.param_widget and hasattr(self.sim.param_widget, 'plus_rect')) else (460, 96)
             self.actions.append({"type": "move", "pos": plus_pos})
             self.actions.append({"type": "click", "pos": plus_pos})
-            self.actions.append({"type": "wait", "duration": 0.4})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "click", "pos": plus_pos})
-            self.actions.append({"type": "wait", "duration": 0.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h1_pos[0]-10, h1_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h1_pos})
             self.actions.append({"type": "click", "pos": h1_pos})
-            self.actions.append({"type": "wait", "duration": 0.3})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h2_pos[0]-10, h2_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h2_pos})
             self.actions.append({"type": "click", "pos": h2_pos})
-            self.actions.append({"type": "wait", "duration": 1.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 3:
             btn_pos = self.get_button_pos("LED")
@@ -796,15 +823,15 @@ class TutorialManager:
                 self.actions.append({"type": "highlight", "rect": btn.rect})
             self.actions.append({"type": "move", "pos": btn_pos})
             self.actions.append({"type": "click", "pos": btn_pos})
-            self.actions.append({"type": "wait", "duration": 0.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h1_pos[0]-10, h1_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h1_pos})
             self.actions.append({"type": "click", "pos": h1_pos})
-            self.actions.append({"type": "wait", "duration": 0.3})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h2_pos[0]-10, h2_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h2_pos})
             self.actions.append({"type": "click", "pos": h2_pos})
-            self.actions.append({"type": "wait", "duration": 1.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 4:
             btn_pos = self.get_button_pos("Wire")
@@ -817,15 +844,15 @@ class TutorialManager:
                 self.actions.append({"type": "highlight", "rect": btn.rect})
             self.actions.append({"type": "move", "pos": btn_pos})
             self.actions.append({"type": "click", "pos": btn_pos})
-            self.actions.append({"type": "wait", "duration": 0.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h1_pos[0]-10, h1_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h1_pos})
             self.actions.append({"type": "click", "pos": h1_pos})
-            self.actions.append({"type": "wait", "duration": 0.3})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "highlight", "rect": pygame.Rect(h2_pos[0]-10, h2_pos[1]-10, 20, 20)})
             self.actions.append({"type": "move", "pos": h2_pos})
             self.actions.append({"type": "click", "pos": h2_pos})
-            self.actions.append({"type": "wait", "duration": 1.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 5:
             btn_pos = self.get_button_pos("Run")
@@ -835,7 +862,8 @@ class TutorialManager:
                 self.actions.append({"type": "highlight", "rect": self.sim.run_button.rect})
             self.actions.append({"type": "move", "pos": btn_pos})
             self.actions.append({"type": "click", "pos": btn_pos})
-            self.actions.append({"type": "wait", "duration": 2.0})
+            self.actions.append({"type": "highlight", "rect": None})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 6:
             h1_pos = self.sim.get_hole_pos(3, 10)
@@ -849,35 +877,37 @@ class TutorialManager:
             self.actions.append({"type": "text", "title": "Step 6: Inspecting Real-Time Data", "text": "Right-click on the Resistor, and then right-click on the LED. The Side Panel displays live diagnostics for each selected component."})
             self.actions.append({"type": "move", "pos": target_pos})
             self.actions.append({"type": "click", "pos": target_pos, "button": 3})
-            self.actions.append({"type": "wait", "duration": 1.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "move", "pos": led_pos})
             self.actions.append({"type": "click", "pos": led_pos, "button": 3})
             self.actions.append({"type": "highlight", "rect": self.sim.side_panel.rect})
-            self.actions.append({"type": "wait", "duration": 2.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 7:
             self.actions.append({"type": "text", "title": "Step 7: Controlling Simulation Time", "text": "When simulating, you can step backward, pause/play, step forward, or reset using the toolbar next to the timer. The timer shows elapsed simulation time."})
-            toolbar_rect = pygame.Rect(720, 20, 240, 60)
+            step_buttons = [self.sim.sim_back_button, self.sim.sim_pause_button,
+                             self.sim.sim_fwd_button, self.sim.sim_reset_button]
+            toolbar_rect = step_buttons[0].rect.unionall([b.rect for b in step_buttons[1:]])
             self.actions.append({"type": "highlight", "rect": toolbar_rect})
             self.actions.append({"type": "move", "pos": (795, 52)})
-            self.actions.append({"type": "wait", "duration": 1.5})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "move", "pos": (1090, 52)})
-            self.actions.append({"type": "wait", "duration": 2.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 8:
             undo_pos = self.get_button_pos("Undo")
             clear_pos = self.get_button_pos("Clear")
             
             self.actions.append({"type": "text", "title": "Step 8: Editing Controls", "text": "Use the Undo button to revert your last placement. Use Clear to remove all components and reset the breadboard. Let's see them at the bottom right."})
-            self.actions.append({"type": "highlight", "rect": pygame.Rect(1020, 640, 170, 50)})
+            self.actions.append({"type": "highlight", "rect": self.sim.undo_button.rect.union(self.sim.clear_button.rect)})
             self.actions.append({"type": "move", "pos": undo_pos})
-            self.actions.append({"type": "wait", "duration": 1.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
             self.actions.append({"type": "move", "pos": clear_pos})
-            self.actions.append({"type": "wait", "duration": 2.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
         elif step_idx == 9:
             self.actions.append({"type": "text", "title": "Walkthrough Complete!", "text": "That's it! You've learned all the features of CircuitSim. We will restore your previous circuit. Click 'Finish' to start exploring on your own!"})
-            self.actions.append({"type": "wait", "duration": 2.0})
+            self.actions.append({"type": "wait", "duration": self.wait_duration})
 
     def handle_event(self, event):
         if not self.active:
@@ -885,16 +915,16 @@ class TutorialManager:
             
         if event.type == pygame.MOUSEBUTTONDOWN:
             pos = event.pos
-            if self.skip_btn_rect.collidepoint(pos):
+            if self.skip_button.rect.collidepoint(pos):
                 self.stop_tutorial()
                 return True
-            elif self.back_btn_rect.collidepoint(pos):
+            elif self.back_button.rect.collidepoint(pos):
                 self.prev_step()
                 return True
-            elif self.play_btn_rect.collidepoint(pos):
+            elif self.play_button.rect.collidepoint(pos):
                 self.is_paused = not self.is_paused
                 return True
-            elif self.next_btn_rect.collidepoint(pos):
+            elif self.next_button.rect.collidepoint(pos):
                 self.next_step()
                 return True
             return True
@@ -922,7 +952,7 @@ class TutorialManager:
             
         if not self.actions:
             if not hasattr(self, 'auto_advance_timer'):
-                self.auto_advance_timer = 2.0
+                self.auto_advance_timer = self.wait_duration
             else:
                 self.auto_advance_timer -= 1/60.0
                 if self.auto_advance_timer <= 0:
@@ -1001,33 +1031,26 @@ class TutorialManager:
                               self.highlight_rect.height + 8 + pulse), 
                              3, border_radius=4)
                              
-        card_rect = pygame.Rect(0, 0, WINDOW_WIDTH, 75)
-        pygame.draw.rect(surface, PANEL_COLOR, card_rect)
-        pygame.draw.line(surface, PANEL_BORDER, (0, 75), (WINDOW_WIDTH, 75), 2)
-        
+        # Drop shadow + rounded card, matching the breadboard panel styling.
+        pygame.draw.rect(surface, (5, 10, 20),
+                          (self.card_rect.x + 8, self.card_rect.y + 8,
+                           self.card_rect.width, self.card_rect.height),
+                          border_radius=12)
+        pygame.draw.rect(surface, PANEL_COLOR, self.card_rect, border_radius=12)
+        pygame.draw.rect(surface, PANEL_BORDER, self.card_rect, 2, border_radius=12)
+
         title_surf = self.font_title.render(self.title_text, True, TEXT_COLOR)
-        surface.blit(title_surf, (20, 12))
-        
-        body_rect = pygame.Rect(20, 38, 880, 32)
-        self.draw_multiline_text(surface, self.body_text, body_rect, self.font_body, MUTED_TEXT)
-        
+        surface.blit(title_surf, (self.card_rect.x + 20, self.card_rect.y + 10))
+
+        self.draw_multiline_text(surface, self.body_text, self.body_rect, self.font_body, MUTED_TEXT)
+
         m_pos = self.sim.get_internal_pos(pygame.mouse.get_pos())
-        
-        def draw_card_btn(rect, text, bg_color, hover_color):
-            hovered = rect.collidepoint(m_pos)
-            color = hover_color if hovered else bg_color
-            pygame.draw.rect(surface, color, rect, border_radius=4)
-            btn_surf = self.font_btn.render(text, True, (255, 255, 255))
-            surface.blit(btn_surf, btn_surf.get_rect(center=rect.center))
-            
-        draw_card_btn(self.skip_btn_rect, "Skip Tutorial", (239, 68, 68), (248, 113, 113))
-        draw_card_btn(self.back_btn_rect, "Back", (107, 114, 128), (156, 163, 175))
-        
-        play_text = "Pause" if not self.is_paused else "Resume"
-        draw_card_btn(self.play_btn_rect, play_text, (59, 130, 246), (96, 165, 250))
-        
-        next_text = "Finish" if self.current_step_index == 9 else "Next"
-        draw_card_btn(self.next_btn_rect, next_text, (16, 185, 129), (52, 211, 153))
+
+        self.play_button.text = "Resume" if self.is_paused else "Pause"
+        self.next_button.text = "Finish" if self.current_step_index == 9 else "Next"
+
+        for btn in (self.skip_button, self.back_button, self.play_button, self.next_button):
+            btn.draw(surface, self.font_btn, m_pos)
         
         if self.click_ripple_pos and self.click_ripple_radius > 0:
             alpha = int(255 * (1 - self.click_ripple_radius / self.click_ripple_max))
