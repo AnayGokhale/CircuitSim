@@ -23,6 +23,7 @@ Rather than using basic placeholder images, the simulator renders detailed proce
 
 <img width="265" height="150" alt="Screenshot 2026-07-21 151334" src="https://github.com/user-attachments/assets/98bd6b45-dc74-4c84-96b4-d8a866320c4d" />
 <img width="265" height="150" alt="Screenshot 2026-07-21 151304" src="https://github.com/user-attachments/assets/8b39f02f-d3cc-4978-90dd-10e9bbfbe788" />
+
 <img width="265" height="150" alt="Screenshot 2026-07-21 151127" src="https://github.com/user-attachments/assets/d95a75a4-7821-46bf-914f-de3b1f73aedd" />
 <img width="265" height="150" alt="Screenshot 2026-07-21 151533" src="https://github.com/user-attachments/assets/ebcb317b-ab07-463e-aa34-fe41df29c4cc" />
 
