@@ -4,7 +4,8 @@ A high-fidelity Python based circuit simulator that provides an interactive brea
 
 Built using Pygame for rendering and configured to compile to WebAssembly via Pygbag, the simulator can run natively as a desktop application or embedded directly in a web browser.
 
-[Placeholder: A screenshot showing the main breadboard interface with a complete RLC circuit and glowing LEDs.]
+<img width="950" height="550" alt="Screenshot 2026-07-21 150958" src="https://github.com/user-attachments/assets/da503f5e-490e-4706-8131-d6efaccd68db" />
+
 
 ## Core Features
 
@@ -20,7 +21,10 @@ Rather than using basic placeholder images, the simulator renders detailed proce
 *   **Dynamic Visuals**: Resistors dynamically draw standard color bands matching their user defined ohmic values. LEDs alter their visual brightness based on calculated power dissipation and turn off completely when the simulation stops.
 *   **Custom Graphics**: Features sophisticated programmatic drawings for batteries and toroidal inductors, with careful attention paid to visual contrast, shadows, and component scaling against the breadboard background.
 
-[Placeholder: A close-up image showing the rendered toroidal inductor, a resistor displaying color bands, and an illuminated LED.]
+<img width="245" height="150" alt="Screenshot 2026-07-21 151334" src="https://github.com/user-attachments/assets/98bd6b45-dc74-4c84-96b4-d8a866320c4d" />
+<img width="245" height="150" alt="Screenshot 2026-07-21 151304" src="https://github.com/user-attachments/assets/8b39f02f-d3cc-4978-90dd-10e9bbfbe788" />
+<img width="245" height="150" alt="Screenshot 2026-07-21 151127" src="https://github.com/user-attachments/assets/d95a75a4-7821-46bf-914f-de3b1f73aedd" />
+<img width="245" height="150" alt="Screenshot 2026-07-21 151533" src="https://github.com/user-attachments/assets/ebcb317b-ab07-463e-aa34-fe41df29c4cc" />
 
 ### Comprehensive Verification Suite
 The project includes a robust testing module that strictly validates the physics calculations. The tests simulate complex scenarios like ringing in an LC circuit or discharge curves in an RC circuit. These tests generate detailed logs recording voltages, currents, and component energy at initial states, peak oscillations, and steady states.
@@ -41,8 +45,6 @@ The project is structured into three primary modular components.
 *   `main.py`: Serves as the primary Pygame loop and UI controller. The main entry point acts as an asynchronous wrapper allowing the application event loop to run cleanly with `pygbag`.
 
 By utilizing `pygbag`, the entire Python suite can be compiled to execute locally within any standard web browser, making it trivial to host and share the simulator online.
-
-[Placeholder: A GIF or screenshot demonstrating the simulator running inside a web browser window.]
 
 ## LICENSE
 Copyright 2026 Anay Gokhale
